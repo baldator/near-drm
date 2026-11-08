@@ -1,0 +1,7 @@
+.env
+**/node_modules/
+contract/target/
+tracks/**
+00-setup.MD
+HACKATHON.md
+prompt.md

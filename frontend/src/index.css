@@ -1,0 +1,430 @@
+@import '@near-wallet-selector/modal-ui/styles.css';
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  margin: 0;
+  padding: 0;
+  background-color: #f5f5f5;
+  color: #333;
+}
+
+.app {
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+}
+
+.app-header {
+  background-color: #1a1a2e;
+  color: white;
+  padding: 1rem 2rem;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.app-header h1,
+.app-header .brand {
+  margin: 0;
+  font-size: 1.25rem;
+  color: white;
+  text-decoration: none;
+  font-weight: 700;
+}
+
+.header-nav {
+  display: flex;
+  gap: 1.25rem;
+}
+
+.nav-link {
+  color: rgba(255,255,255,0.8);
+  text-decoration: none;
+  font-size: 0.9rem;
+}
+
+.nav-link:hover {
+  color: white;
+  text-decoration: underline;
+}
+
+.app-main {
+  flex: 1;
+  padding: 2rem;
+  max-width: 800px;
+  margin: 0 auto;
+}
+
+.app-footer {
+  background-color: #1a1a2e;
+  color: #888;
+  padding: 1rem 2rem;
+  text-align: center;
+  font-size: 0.875rem;
+}
+
+.page {
+  max-width: 600px;
+  margin: 0 auto;
+}
+
+.page h1 {
+  font-size: 2rem;
+  margin-bottom: 1rem;
+  color: #1a1a2e;
+}
+
+.status {
+  padding: 0.75rem;
+  margin-bottom: 1rem;
+  border-radius: 4px;
+  background-color: #e3f2fd;
+  color: #1565c0;
+  font-size: 0.875rem;
+}
+
+.status.success {
+  background-color: #e8f5e9;
+  color: #2e7d32;
+}
+
+.btn {
+  padding: 0.6rem 1.2rem;
+  border: none;
+  border-radius: 4px;
+  cursor: pointer;
+  font-size: 0.9rem;
+  font-weight: 500;
+  transition: background-color 0.2s;
+}
+
+.btn-primary {
+  background-color: #1a1a2e;
+  color: white;
+}
+
+.btn-primary:hover {
+  background-color: #2d2d44;
+}
+
+.btn-outline {
+  background-color: transparent;
+  color: #1a1a2e;
+  border: 1px solid #1a1a2e;
+}
+
+.btn-outline:hover {
+  background-color: #f0f0f0;
+}
+
+.form-group {
+  margin-bottom: 1rem;
+}
+
+.form-group label {
+  display: block;
+  margin-bottom: 0.4rem;
+  font-weight: 500;
+  color: #1a1a2e;
+}
+
+.form-group input,
+.form-group textarea {
+  width: 100%;
+  padding: 0.6rem;
+  border: 1px solid #ddd;
+  border-radius: 4px;
+  font-size: 0.9rem;
+}
+
+.form-group small.hint {
+  display: block;
+  margin-top: 0.25rem;
+  font-size: 0.75rem;
+  color: #666;
+}
+
+.checkbox-label {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  cursor: pointer;
+}
+
+.token-info {
+  background-color: #fff;
+  padding: 1rem;
+  border-radius: 4px;
+  border: 1px solid #ddd;
+  margin-bottom: 1rem;
+}
+
+.token-info p {
+  margin: 0.5rem 0;
+  font-size: 0.9rem;
+}
+
+.token-info code {
+  background-color: #f5f5f5;
+  padding: 0.1rem 0.4rem;
+  border-radius: 3px;
+  font-family: monospace;
+}
+
+.access-section {
+  background-color: #fff;
+  padding: 1rem;
+  border-radius: 4px;
+  border: 1px solid #ddd;
+  margin-bottom: 1rem;
+}
+
+.access-section h2 {
+  margin-top: 0;
+  font-size: 1.25rem;
+  color: #1a1a2e;
+}
+
+.decrypt-section {
+  background-color: #fff;
+  padding: 1rem;
+  border-radius: 4px;
+  border: 1px solid #ddd;
+}
+
+.result {
+  background-color: #e8f5e9;
+  padding: 1rem;
+  border-radius: 4px;
+  margin-top: 1rem;
+}
+
+.result h3 {
+  margin-top: 0;
+  color: #2e7d32;
+}
+
+.history-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+  gap: 1rem;
+  margin-bottom: 1rem;
+}
+
+.card {
+  background-color: #fff;
+  padding: 1rem;
+  border-radius: 4px;
+  border: 1px solid #ddd;
+}
+
+.card h3 {
+  margin-top: 0;
+  font-size: 1rem;
+  color: #1a1a2e;
+  border-bottom: 2px solid #1a1a2e;
+  padding-bottom: 0.5rem;
+}
+
+.card p {
+  margin: 0.5rem 0;
+  font-size: 0.875rem;
+}
+
+.card ul {
+  margin: 0.5rem 0;
+  padding-left: 1.2rem;
+}
+
+.card li {
+  margin-bottom: 0.4rem;
+  font-size: 0.875rem;
+}
+
+/* Landing page */
+.landing {
+  max-width: 1000px;
+  margin: 0 auto;
+  padding: 2rem 1rem;
+}
+
+.landing .hero {
+  text-align: center;
+  padding: 4rem 1rem;
+  background: linear-gradient(135deg, #1a1a2e 0%, #2d2d44 100%);
+  color: white;
+  border-radius: 12px;
+  margin-bottom: 3rem;
+}
+
+.landing .hero h1 {
+  font-size: 2.5rem;
+  margin: 0 0 1rem;
+  color: white;
+}
+
+.landing .hero p {
+  font-size: 1.25rem;
+  margin: 0 0 2rem;
+  opacity: 0.95;
+  max-width: 700px;
+  margin-left: auto;
+  margin-right: auto;
+}
+
+.landing .hero-actions {
+  display: flex;
+  gap: 1rem;
+  justify-content: center;
+  flex-wrap: wrap;
+}
+
+.landing .btn-ghost {
+  background: transparent;
+  color: white;
+  border: 1px solid rgba(255,255,255,0.6);
+}
+
+.landing .btn-ghost:hover {
+  background: rgba(255,255,255,0.1);
+}
+
+.landing .section {
+  margin-bottom: 4rem;
+}
+
+.landing .section h2 {
+  font-size: 1.75rem;
+  color: #1a1a2e;
+  margin-bottom: 1.5rem;
+  border-bottom: 3px solid #1a1a2e;
+  display: inline-block;
+}
+
+.landing .section h3 {
+  font-size: 1.25rem;
+  color: #1a1a2e;
+  margin-top: 1.5rem;
+  margin-bottom: 0.75rem;
+}
+
+.landing .section p {
+  line-height: 1.7;
+  font-size: 1.05rem;
+}
+
+.landing .steps {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 2rem;
+  justify-content: center;
+}
+
+.landing .step {
+  flex: 1;
+  min-width: 220px;
+  max-width: 280px;
+  background: #fff;
+  border: 1px solid #ddd;
+  border-radius: 8px;
+  padding: 1.5rem;
+  text-align: center;
+}
+
+.landing .step .num {
+  display: inline-block;
+  width: 2.5rem;
+  height: 2.5rem;
+  line-height: 2.5rem;
+  background: #1a1a2e;
+  color: white;
+  border-radius: 50%;
+  font-size: 1.25rem;
+  font-weight: bold;
+  margin-bottom: 1rem;
+}
+
+.landing .features {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+  gap: 1.5rem;
+}
+
+.landing .feature {
+  background: #fff;
+  border: 1px solid #ddd;
+  border-radius: 8px;
+  padding: 1.5rem;
+}
+
+.landing .feature h4 {
+  margin-top: 0;
+  color: #1a1a2e;
+  font-size: 1.1rem;
+}
+
+.landing .feature p {
+  margin: 0.5rem 0 0;
+  font-size: 0.95rem;
+  color: #555;
+}
+
+.landing .card-box {
+  background: #fff;
+  border: 1px solid #ddd;
+  border-radius: 8px;
+  padding: 1.5rem;
+  margin-bottom: 1.5rem;
+}
+
+.landing .card-box h4 {
+  margin-top: 0;
+  color: #1a1a2e;
+}
+
+.landing ul {
+  padding-left: 1.5rem;
+  line-height: 1.8;
+}
+
+.landing ul li {
+  margin-bottom: 0.5rem;
+}
+
+.landing .code {
+  background: #f5f5f5;
+  padding: 0.15rem 0.4rem;
+  border-radius: 3px;
+  font-family: monospace;
+  font-size: 0.9rem;
+}
+
+.landing .cta {
+  text-align: center;
+  padding: 3rem 1rem;
+  background: #1a1a2e;
+  color: white;
+  border-radius: 12px;
+}
+
+.landing .cta h2 {
+  color: white;
+  border-bottom: none;
+}
+
+.landing a {
+  color: #1a1a2e;
+  text-decoration: underline;
+}
+
+.landing .nav-links {
+  display: flex;
+  gap: 1rem;
+  justify-content: center;
+  flex-wrap: wrap;
+  margin-bottom: 2rem;
+}
