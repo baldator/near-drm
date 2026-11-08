@@ -30,6 +30,9 @@ jobs:
             contract/target
           key: ${{ runner.os }}-cargo-${{ hashFiles('contract/Cargo.lock') }}
 
+      - name: Install system dependencies for cargo-near
+        run: sudo apt-get update && sudo apt-get install -y libudev-dev libusb-1.0-0-dev
+
       - name: Install cargo-near
         run: cargo install cargo-near
 
