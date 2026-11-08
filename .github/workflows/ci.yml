@@ -38,7 +38,7 @@ jobs:
 
       - name: Build release wasm
         working-directory: contract
-        run: cargo near build --release
+        run: cargo near build non-reproducible-wasm
 
       - name: Install wasm-tools
         run: cargo install wasm-tools
