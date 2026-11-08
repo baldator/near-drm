@@ -1,5 +1,6 @@
+use near_sdk::near;
 use near_sdk::borsh::{BorshDeserialize, BorshSerialize};
-use near_sdk::{LazyOption, LookupMap, UnorderedSet};
+use near_sdk::collections::{LazyOption, LookupMap, UnorderedSet};
 use near_sdk::json_types::U128;
 use near_sdk::serde::{Deserialize, Serialize};
 use near_sdk::{env, near_bindgen, AccountId, BorshStorageKey, Gas, NearToken, PanicOnDefault, Promise, PromiseOrValue, Timestamp};
@@ -16,8 +17,8 @@ enum StorageKey {
     PendingTransfers,
 }
 
-#[derive(BorshSerialize, BorshDeserialize, Serialize, Deserialize, Clone, Debug)]
-#[serde(crate = "near_sdk::serde")]
+#[near(serializers = [json, borsh])]
+#[derive(Clone, Debug)]
 pub struct TokenMetadata {
     pub title: Option<String>, pub description: Option<String>, pub media: Option<String>,
     pub media_hash: Option<Vec<u8>>, pub copies: Option<u64>,
@@ -29,18 +30,18 @@ pub struct TokenMetadata {
     pub royalty_percentage: Option<u16>,
 }
 
-#[derive(BorshSerialize, BorshDeserialize, Serialize, Deserialize, Clone, Debug)]
-#[serde(crate = "near_sdk::serde")]
+#[near(serializers = [json, borsh])]
+#[derive(Clone, Debug)]
 pub struct AccessRules {
     pub ttl_hours: Option<u64>, pub single_use: Option<bool>, pub max_views: Option<u32>,
 }
 
-#[derive(BorshSerialize, BorshDeserialize, Serialize, Deserialize, Clone, Debug, PartialEq)]
-#[serde(crate = "near_sdk::serde")]
+#[near(serializers = [json, borsh])]
+#[derive(Clone, Debug, PartialEq)]
 pub enum LockState { Active, Locked }
 
-#[derive(BorshSerialize, BorshDeserialize, Serialize, Deserialize, Clone, Debug)]
-#[serde(crate = "near_sdk::serde")]
+#[near(serializers = [json, borsh])]
+#[derive(Clone, Debug)]
 pub struct Approval {
     pub account_id: AccountId, pub approval_id: u64, pub expires_at: Option<Timestamp>,
 }
@@ -59,8 +60,8 @@ pub struct PendingTransfer {
     pub receiver_id: AccountId,
 }
 
-#[near_bindgen]
-#[derive(BorshDeserialize, BorshSerialize, PanicOnDefault)]
+#[near(contract_state)]
+#[derive(PanicOnDefault)]
 pub struct Contract {
     pub owner_id: AccountId,
     pub tokens_per_owner: LookupMap<AccountId, UnorderedSet<String>>,
@@ -79,7 +80,15 @@ pub struct Contract {
 
 type TokenId = String;
 
+fn tokens_per_owner_prefix(account_id: &AccountId) -> Vec<u8> {
+    let mut p = b"tokens_per_owner".to_vec();
+    p.extend_from_slice(account_id.as_bytes());
+    p
+}
+
+#[near]
 impl Contract {
+    #[init]   
     pub fn new(owner_id: AccountId, metadata: TokenMetadata) -> Contract {
         let mut this = Self {
             owner_id,
@@ -104,7 +113,7 @@ impl Contract {
 
     fn internal_mint(&mut self, token_id: TokenId, owner_id: AccountId, metadata: Option<TokenMetadata>) {
         assert!(self.tokens_by_id.get(&token_id).is_none(), "Token already exists");
-        let mut owner_tokens = self.tokens_per_owner.get(&owner_id).unwrap_or_else(|| UnorderedSet::new(StorageKey::TokensPerOwner));
+        let mut owner_tokens = self.tokens_per_owner.get(&owner_id).unwrap_or_else(|| UnorderedSet::new(tokens_per_owner_prefix(&owner_id)));
         let token = Token { owner_id: owner_id.clone(), approvals: LookupMap::new(StorageKey::ApprovalsById), next_approval_id: 0 };
         self.tokens_by_id.insert(&token_id, &token);
         self.owner_of.insert(&token_id, &owner_id);
@@ -202,7 +211,7 @@ impl Contract {
         let mut sender_tokens = self.tokens_per_owner.get(&token.owner_id).expect("Sender has no tokens");
         sender_tokens.remove(&token_id);
         self.tokens_per_owner.insert(&token.owner_id, &sender_tokens);
-        let mut receiver_tokens = self.tokens_per_owner.get(&receiver_id).unwrap_or_else(|| UnorderedSet::new(StorageKey::TokensPerOwner));
+        let mut receiver_tokens = self.tokens_per_owner.get(&receiver_id).unwrap_or_else(|| UnorderedSet::new(tokens_per_owner_prefix(&receiver_id)));
         receiver_tokens.insert(&token_id);
         self.tokens_per_owner.insert(&receiver_id, &receiver_tokens);
         let mut updated_token = token;
@@ -304,64 +313,67 @@ impl Contract {
         if env::promise_results_count() == 1 {
             match env::promise_result_checked(0, 1024) {
                 Ok(_) => {
-                    // Success: transfer is finalized
+                    // Success: transfer is finalized → add token to receiver's set
                     let mut receiver_tokens = self
                         .tokens_per_owner
                         .get(receiver_id)
-                        .unwrap_or_else(|| UnorderedSet::new(StorageKey::TokensPerOwner));
+                        .unwrap_or_else(|| UnorderedSet::new(tokens_per_owner_prefix(receiver_id)));
                     receiver_tokens.insert(token_id);
                     self.tokens_per_owner.insert(receiver_id, &receiver_tokens);
 
                     self.token_lock_state.insert(token_id, &LockState::Active);
 
-                    let event = format!("{{\"standard\":\"nep171\",\"version\":\"1.0.0\",\"event\":\"nft_transfer\",\"data\":[{{\"old_owner_id\":\"{}\",\"new_owner_id\":\"{}\",\"token_ids\":[\"{}\"],\"memo\":\"\"}}]}}", sender_id, receiver_id, token_id);
+                    let event = format!(
+                        "{{\"standard\":\"nep171\",\"version\":\"1.0.0\",\"event\":\"nft_transfer\",\"data\":[{{\"old_owner_id\":\"{}\",\"new_owner_id\":\"{}\",\"token_ids\":[\"{}\"],\"memo\":\"\"}}]}}",
+                        sender_id, receiver_id, token_id
+                    );
                     env::log_str(&format!("EVENT_JSON:{}", event));
 
                     self.pending_transfers.remove(&pending_id);
                     true
                 }
                 _ => {
-                    // Failure: roll back transfer
+                    // Failure: roll back → sender gets token back, remove from receiver's set
                     let mut token = self.tokens_by_id.get(token_id).expect("Token not found");
                     token.owner_id = sender_id.clone();
-                    self.owner_of.insert(token_id, &sender_id);
+                    self.owner_of.insert(token_id, sender_id);
+                    self.tokens_by_id.insert(token_id, &token);
 
                     let mut sender_tokens = self
                         .tokens_per_owner
                         .get(sender_id)
-                        .unwrap_or_else(|| UnorderedSet::new(StorageKey::TokensPerOwner));
+                        .unwrap_or_else(|| UnorderedSet::new(tokens_per_owner_prefix(sender_id)));
                     sender_tokens.insert(token_id);
                     self.tokens_per_owner.insert(sender_id, &sender_tokens);
 
                     let mut receiver_tokens = self
                         .tokens_per_owner
                         .get(receiver_id)
-                        .unwrap_or_else(|| UnorderedSet::new(StorageKey::TokensPerOwner));
+                        .unwrap_or_else(|| UnorderedSet::new(tokens_per_owner_prefix(receiver_id)));
                     receiver_tokens.remove(token_id);
                     self.tokens_per_owner.insert(receiver_id, &receiver_tokens);
 
                     self.token_lock_state.insert(token_id, &LockState::Active);
-                    self.tokens_by_id.insert(token_id, &token);
 
                     self.pending_transfers.remove(&pending_id);
                     false
                 }
             }
         } else {
-            // Unexpected - roll back
+            // Unexpected promise count → roll back to sender
             let mut token = self.tokens_by_id.get(token_id).expect("Token not found");
             token.owner_id = sender_id.clone();
-            self.owner_of.insert(token_id, &sender_id);
+            self.owner_of.insert(token_id, sender_id);
+            self.tokens_by_id.insert(token_id, &token);
 
             let mut sender_tokens = self
                 .tokens_per_owner
                 .get(sender_id)
-                .unwrap_or_else(|| UnorderedSet::new(StorageKey::TokensPerOwner));
+                .unwrap_or_else(|| UnorderedSet::new(tokens_per_owner_prefix(sender_id)));
             sender_tokens.insert(token_id);
             self.tokens_per_owner.insert(sender_id, &sender_tokens);
 
             self.token_lock_state.insert(token_id, &LockState::Active);
-            self.tokens_by_id.insert(token_id, &token);
 
             self.pending_transfers.remove(&pending_id);
             false

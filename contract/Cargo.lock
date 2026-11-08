@@ -619,25 +619,12 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "8452105ba047068f40ff7093dd1d9da90898e63dd61736462e9cdda6a90ad3c3"
 
 [[package]]
-name = "near-abi"
-version = "0.4.5"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "70883145898d496f9946cdf0a5a3ed0c62a131ec9377e456b317ef09f4d56b2f"
-dependencies = [
- "borsh",
- "schemars 0.8.22",
- "semver",
- "serde",
-]
-
-[[package]]
 name = "near-account-id"
 version = "3.0.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "7d2c8642aeca89873dbcf2a2f74ff90cd87f6691f11b66aeed2af7c136192d10"
 dependencies = [
  "borsh",
- "schemars 0.8.22",
  "serde",
 ]
 
@@ -666,7 +653,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "26c6d9abf62601c341659a47bd801b714e9fa1fa18bd3ed5ae8597635680c868"
 dependencies = [
  "borsh",
- "schemars 0.8.22",
  "serde",
 ]
 
@@ -685,7 +671,6 @@ dependencies = [
  "near-digest",
  "near-sdk-core",
  "near-sdk-env",
- "schemars 0.8.22",
  "serde",
  "serde_with",
  "sha3",
@@ -701,7 +686,6 @@ dependencies = [
  "borsh",
  "bs58",
  "hex-literal",
- "near-abi",
  "near-account-id",
  "near-gas",
  "near-global-contracts",
@@ -711,7 +695,6 @@ dependencies = [
  "near-sys",
  "near-token",
  "once_cell",
- "schemars 0.8.22",
  "serde",
  "serde_json",
  "serde_with",
@@ -733,7 +716,6 @@ dependencies = [
  "near-gas",
  "near-sdk-env",
  "near-token",
- "schemars 0.8.22",
  "serde",
  "serde_json",
  "serde_with",
@@ -782,7 +764,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "5a1acd9d19bc586db24cf5e212a8a8113c3d3c4a2c74838a8c26532641bf560f"
 dependencies = [
  "borsh",
- "schemars 0.8.22",
  "serde",
 ]
 
@@ -966,12 +947,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "semver"
-version = "1.0.28"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "8a7852d02fc848982e0c167ef163aaff9cd91dc640ba85e263cb1ce46fae51cd"
-
-[[package]]
 name = "serde"
 version = "1.0.229"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1040,7 +1015,6 @@ dependencies = [
  "indexmap 1.9.3",
  "indexmap 2.14.2",
  "jiff",
- "schemars 0.8.22",
  "schemars 0.9.0",
  "schemars 1.2.3",
  "serde_core",
@@ -1245,6 +1219,7 @@ version = "0.1.0"
 dependencies = [
  "borsh",
  "near-sdk",
+ "schemars 0.8.22",
  "serde",
  "serde_json",
 ]
