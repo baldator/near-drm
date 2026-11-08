@@ -1,0 +1,82 @@
+name: CI - Build & Test Smart Contract
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  build-and-test:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Install Rust toolchain
+        uses: actions-rs/toolchain@v1
+        with:
+          toolchain: stable
+          target: wasm32-unknown-unknown
+          override: true
+
+      - name: Cache cargo registry and target
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            contract/target
+          key: ${{ runner.os }}-cargo-${{ hashFiles('contract/Cargo.lock') }}
+
+      - name: Run smart contract tests
+        working-directory: contract
+        run: cargo test --verbose
+
+      - name: Save test results as artifact
+        if: always()
+        working-directory: contract
+        run: |
+          cargo test --verbose --format json > test-results.json 2>&1 || true
+          cp test-results.json ../test-results.json
+
+      - name: Upload test results artifact
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: contract-test-results
+          path: test-results.json
+          retention-days: 7
+
+      - name: Build release wasm
+        working-directory: contract
+        run: cargo build --release --target wasm32-unknown-unknown
+
+      - name: Install wasm-tools
+        run: cargo install wasm-tools
+
+      - name: Analyze wasm exports (verify `new` function exists)
+        working-directory: contract
+        run: |
+          echo "=== WASM Exports ==="
+          wasm-tools export target/wasm32-unknown-unknown/release/vault.wasm || true
+          echo ""
+          echo "=== Checking for 'new' function ==="
+          if wasm-tools export target/wasm32-unknown-unknown/release/vault.wasm 2>/dev/null | grep -qw "new"; then
+            echo "✓ 'new' function found in WASM exports"
+          else
+            echo "✗ ERROR: 'new' function NOT found in WASM exports!"
+            exit 1
+          fi
+
+      - name: Verify wasm exists
+        working-directory: contract
+        run: ls -lh target/wasm32-unknown-unknown/release/*.wasm
+
+      - name: Upload wasm artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: vault-contract-wasm
+          path: contract/target/wasm32-unknown-unknown/release/vault.wasm
+          retention-days: 30
