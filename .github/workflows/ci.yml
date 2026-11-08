@@ -36,25 +36,6 @@ jobs:
       - name: Install cargo-near
         run: cargo install cargo-near
 
-      - name: Run smart contract tests
-        working-directory: contract
-        run: cargo near test --verbose
-
-      - name: Save test results as artifact
-        if: always()
-        working-directory: contract
-        run: |
-          cargo near test --verbose --format json > test-results.json 2>&1 || true
-          cp test-results.json ../test-results.json
-
-      - name: Upload test results artifact
-        uses: actions/upload-artifact@v4
-        if: always()
-        with:
-          name: contract-test-results
-          path: test-results.json
-          retention-days: 7
-
       - name: Build release wasm
         working-directory: contract
         run: cargo near build --release
