@@ -30,6 +30,9 @@ jobs:
             contract/target
           key: ${{ runner.os }}-cargo-${{ hashFiles('contract/Cargo.lock') }}
 
+      - name: Install cargo-near
+        run: cargo install cargo-near
+
       - name: Run smart contract tests
         working-directory: contract
         run: cargo near test --verbose
@@ -48,9 +51,6 @@ jobs:
           name: contract-test-results
           path: test-results.json
           retention-days: 7
-
-      - name: Install cargo-near
-        run: cargo install cargo-near
 
       - name: Build release wasm
         working-directory: contract
