@@ -1,0 +1,120 @@
+{
+  "contract": {
+    "methods": {
+      "new": {
+        "args": [
+          {"name": "owner_id", "type": "AccountId"},
+          {"name": "metadata", "type": "TokenMetadata"}
+        ],
+        "return": "Contract"
+      },
+      "nft_metadata": {
+        "args": [],
+        "return": "TokenMetadata"
+      },
+      "nft_mint": {
+        "args": [
+          {"name": "token_id", "type": "TokenId"},
+          {"name": "owner_id", "type": "AccountId"},
+          {"name": "metadata", "type": "Option<TokenMetadata>"}
+        ],
+        "return": "void"
+      },
+      "nft_approve": {
+        "args": [
+          {"name": "token_id", "type": "TokenId"},
+          {"name": "account_id", "type": "AccountId"},
+          {"name": "msg", "type": "Option<String>"}
+        ],
+        "return": "Option<U128>"
+      },
+      "nft_revoke": {
+        "args": [
+          {"name": "token_id", "type": "TokenId"},
+          {"name": "account_id", "type": "AccountId"}
+        ],
+        "return": "void"
+      },
+      "nft_is_approved": {
+        "args": [
+          {"name": "token_id", "type": "TokenId"},
+          {"name": "approved_account_id", "type": "AccountId"}
+        ],
+        "return": "bool"
+      },
+      "nft_approvals": {
+        "args": [
+          {"name": "token_id", "type": "TokenId"}
+        ],
+        "return": "Vec<Approval>"
+      },
+      "nft_transfer": {
+        "args": [
+          {"name": "receiver_id", "type": "AccountId"},
+          {"name": "token_id", "type": "TokenId"},
+          {"name": "approval_id", "type": "Option<u64>"},
+          {"name": "memo", "type": "Option<String>"}
+        ],
+        "return": "void"
+      },
+      "nft_transfer_call": {
+        "args": [
+          {"name": "receiver_id", "type": "AccountId"},
+          {"name": "token_id", "type": "TokenId"},
+          {"name": "approval_id", "type": "Option<u64>"},
+          {"name": "memo", "type": "Option<String>"},
+          {"name": "msg", "type": "String"}
+        ],
+        "return": "PromiseOrValue<bool>"
+      },
+      "nft_resolve_transfer": {
+        "args": [
+          {"name": "pending_id", "type": "u64"}
+        ],
+        "return": "bool"
+      },
+      "nft_total_supply": {
+        "args": [],
+        "return": "U128"
+      },
+      "nft_supply_for_owner": {
+        "args": [
+          {"name": "account_id", "type": "AccountId"}
+        ],
+        "return": "U128"
+      },
+      "nft_owner_of": {
+        "args": [
+          {"name": "token_id", "type": "TokenId"}
+        ],
+        "return": "Option<AccountId>"
+      },
+      "nft_token": {
+        "args": [
+          {"name": "token_id", "type": "TokenId"}
+        ],
+        "return": "Option<TokenMetadata>"
+      },
+      "nft_tokens_for_owner": {
+        "args": [
+          {"name": "account_id", "type": "AccountId"},
+          {"name": "from_index", "type": "Option<U128>"},
+          {"name": "limit", "type": "Option<u64>"}
+        ],
+        "return": "Vec<TokenId>"
+      },
+      "get_sub_account": {
+        "args": [
+          {"name": "token_id", "type": "TokenId"}
+        ],
+        "return": "Option<AccountId>"
+      },
+      "get_lock_state": {
+        "args": [
+          {"name": "token_id", "type": "TokenId"}
+        ],
+        "return": "LockState"
+      }
+    }
+  }
+}
