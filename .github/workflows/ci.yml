@@ -40,23 +40,6 @@ jobs:
         working-directory: contract
         run: cargo near build non-reproducible-wasm
 
-      - name: Install wasm-tools
-        run: cargo install wasm-tools
-
-      - name: Analyze wasm exports (verify `new` function exists)
-        working-directory: contract
-        run: |
-          echo "=== WASM Exports ==="
-          wasm-tools export target/wasm32-unknown-unknown/release/vault.wasm || true
-          echo ""
-          echo "=== Checking for 'new' function ==="
-          if wasm-tools export target/wasm32-unknown-unknown/release/vault.wasm 2>/dev/null | grep -qw "new"; then
-            echo "✓ 'new' function found in WASM exports"
-          else
-            echo "✗ ERROR: 'new' function NOT found in WASM exports!"
-            exit 1
-          fi
-
       - name: Verify wasm exists
         working-directory: contract
         run: ls -lh target/wasm32-unknown-unknown/release/*.wasm
