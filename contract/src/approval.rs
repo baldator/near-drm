@@ -118,7 +118,7 @@ impl Contract {
     }
 
     /// Clears all approvals for a token and resets its approval counter.
-    fn internal_clear_approvals(&mut self, token_id: &TokenId) {
+    pub(crate) fn internal_clear_approvals(&mut self, token_id: &TokenId) {
         self.approvals_by_id.remove(token_id);
         let mut token = self.tokens_by_id.get(token_id).expect("Token not found");
         token.next_approval_id = 0;

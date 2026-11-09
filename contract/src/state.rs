@@ -1,5 +1,7 @@
+use near_sdk::borsh::{BorshSerialize, BorshStorageKey};
 use near_sdk::collections::{LazyOption, LookupMap, UnorderedSet};
-use near_sdk::{AccountId, BorshStorageKey, PanicOnDefault};
+use near_sdk::near;
+use near_sdk::{AccountId, PanicOnDefault};
 
 use crate::types::{Approval, LockState, PendingTransfer, Token, TokenId, TokenMetadata};
 
