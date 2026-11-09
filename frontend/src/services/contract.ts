@@ -5,6 +5,7 @@ import {
   signIn,
   signOut,
   getAccountId,
+  getWalletName,
   getActiveWallet,
   isSignedIn,
   onAccountChange,
@@ -69,8 +70,12 @@ async function viewFunction(methodName: string, args: any) {
 
 /**
  * Call a change method on the DRM contract via the connected wallet selector wallet.
+ *
+ * @param deposit - yoctoNEAR to attach with the call. Defaults to 0. Some
+ * methods (e.g. storage-deposit-heavy approvals) may need a positive deposit;
+ * methods like nft_mint explicitly reject deposits, so pass 0 for those.
  */
-async function functionCall(methodName: string, args: any) {
+async function functionCall(methodName: string, args: any, deposit: bigint = BigInt(0)) {
   const wallet = getActiveWallet();
   const signerId = getAccountId();
 
@@ -86,7 +91,7 @@ async function functionCall(methodName: string, args: any) {
         methodName,
         args,
         BigInt('300000000000000'), // gas
-        BigInt('12500000000000000000000') // deposit (0.0125 NEAR)
+        deposit
       ),
     ],
   });
@@ -117,6 +122,7 @@ export {
   signIn,
   signOut,
   getAccountId,
+  getWalletName,
   isSignedIn,
   initWalletSelector,
   onAccountChange,

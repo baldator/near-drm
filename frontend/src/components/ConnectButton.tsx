@@ -5,6 +5,7 @@ import {
   initWalletSelector,
   signOut,
   getAccountId,
+  getWalletName,
   isSignedIn,
   getModal,
   onAccountChange,
@@ -13,6 +14,8 @@ import {
 export function ConnectButton({ onConnected }: { onConnected: () => void }) {
   const [isInit, setIsInit] = useState(false);
   const [isConnecting, setIsConnecting] = useState(false);
+  const [accountId, setAccountId] = useState<string | null>(null);
+  const [walletName, setWalletName] = useState<string | null>(null);
 
   useEffect(() => {
     async function setup() {
@@ -21,7 +24,11 @@ export function ConnectButton({ onConnected }: { onConnected: () => void }) {
       await initWalletSelector();
       setIsInit(true);
 
-      if (isSignedIn()) {
+      // After init, the wallet selector may have restored a previous session.
+      const signedIn = isSignedIn();
+      setAccountId(getAccountId());
+      setWalletName(getWalletName());
+      if (signedIn) {
         onConnected();
       }
     }
@@ -30,8 +37,10 @@ export function ConnectButton({ onConnected }: { onConnected: () => void }) {
 
   // Listen for account changes from the wallet selector modal
   useEffect(() => {
-    const unsubscribe = onAccountChange((accountId) => {
-      if (accountId) {
+    const unsubscribe = onAccountChange((changedAccountId) => {
+      setAccountId(changedAccountId);
+      setWalletName(getWalletName());
+      if (changedAccountId) {
         onConnected();
       }
     });
@@ -53,12 +62,18 @@ export function ConnectButton({ onConnected }: { onConnected: () => void }) {
   };
 
   const handleSignOut = async () => {
-    await signOut();
+    const disconnected = await signOut();
+    // Only switch to the "Connect" state if the wallet really disconnected.
+    // If the user cancelled, keep the connected state.
+    if (disconnected) {
+      setAccountId(null);
+      setWalletName(null);
+    }
   };
 
   if (!isInit) return <div>Connecting to NEAR...</div>;
 
-  if (!isSignedIn()) {
+  if (!accountId) {
     return (
       <button onClick={handleLogin} className="btn btn-primary" disabled={isConnecting}>
         {isConnecting ? 'Connecting...' : 'Connect NEAR Wallet'}
@@ -68,9 +83,12 @@ export function ConnectButton({ onConnected }: { onConnected: () => void }) {
 
   return (
     <div className="connected">
-      <span>Connected: {getAccountId()}</span>
-      <button onClick={handleSignOut} className="btn btn-outline">
-        Sign Out
+      <span className="wallet-name" title={accountId}>
+        {walletName ?? 'Wallet'}
+        <span className="wallet-account"> ({accountId})</span>
+      </span>
+      <button onClick={handleSignOut} className="btn btn-outline-light">
+        Disconnect
       </button>
     </div>
   );

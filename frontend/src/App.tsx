@@ -3,6 +3,7 @@ import { BrowserRouter as Router, Routes, Route, Link } from 'react-router-dom';
 import { ConnectButton } from './components/ConnectButton';
 import { LandingPage } from './pages/LandingPage';
 import { DocumentationPage } from './pages/DocumentationPage';
+import { UseCasesPage } from './pages/UseCases';
 import { MintPage } from './pages/Mint';
 import { GatedPage } from './pages/Gated';
 import { HistoryPage } from './pages/History';
@@ -19,6 +20,7 @@ export function App() {
           <nav className="header-nav">
             <Link to="/" className="nav-link">Home</Link>
             <Link to="/docs" className="nav-link">Docs</Link>
+            <Link to="/use-cases" className="nav-link">Use Cases</Link>
             <Link to="/tech-docs" className="nav-link">Technical Docs</Link>
             <Link to="/mint" className="nav-link">Mint</Link>
           </nav>
@@ -28,6 +30,7 @@ export function App() {
         <main className="app-main">
           <Routes>
             <Route path="/" element={<LandingPage />} />
+            <Route path="/use-cases" element={<UseCasesPage />} />
             <Route path="/docs" element={<DocumentationPage />} />
             <Route path="/mint" element={<MintPage />} />
             <Route path="/gated/:tokenId" element={<GatedPage />} />

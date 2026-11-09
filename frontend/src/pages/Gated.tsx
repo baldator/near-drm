@@ -3,6 +3,35 @@ import { contract, getAccountId, isSignedIn } from '../services/contract';
 import { useParams } from 'react-router-dom';
 import { nearMPC } from '../services/near-mpc';
 
+function resolveMediaUrl(media: string): string {
+  if (!media) return '';
+  if (media.startsWith('ipfs://')) {
+    return `https://ipfs.io/ipfs/${media.slice('ipfs://'.length)}`;
+  }
+  if (media.startsWith('http://') || media.startsWith('https://')) {
+    return media;
+  }
+  return `https://ipfs.io/ipfs/${media}`;
+}
+
+function parseExtra(extra: string | null | undefined): any {
+  if (!extra) return null;
+  try {
+    return JSON.parse(extra);
+  } catch {
+    return null;
+  }
+}
+
+function base64ToBlob(base64: string, type: string): Blob {
+  const binary = atob(base64);
+  const bytes = new Uint8Array(binary.length);
+  for (let index = 0; index < binary.length; index += 1) {
+    bytes[index] = binary.charCodeAt(index);
+  }
+  return new Blob([bytes], { type });
+}
+
 export function GatedPage() {
   const { tokenId } = useParams();
   const [isOwner, setIsOwner] = useState(false);
@@ -17,6 +46,8 @@ export function GatedPage() {
   const [revokeAccount, setRevokeAccount] = useState('');
   const [decrypting, setDecrypting] = useState(false);
   const [decryptedContent, setDecryptedContent] = useState<string | null>(null);
+  const [downloadUrl, setDownloadUrl] = useState<string | null>(null);
+  const [downloadName, setDownloadName] = useState('protected-file');
   const [decryptError, setDecryptError] = useState<string | null>(null);
   const [mpcKeyId] = useState('');
   const [mpcProof] = useState('');
@@ -47,6 +78,13 @@ export function GatedPage() {
     }
     load();
   }, [tokenId]);
+
+  // Free the temporary download URL when the page closes or it is replaced.
+  useEffect(() => {
+    return () => {
+      if (downloadUrl) URL.revokeObjectURL(downloadUrl);
+    };
+  }, [downloadUrl]);
 
   const handleGrantAccess = async (targetAccount: string, ttlHours: string) => {
     if (!isSignedIn()) {
@@ -116,6 +154,10 @@ export function GatedPage() {
     setDecrypting(true);
     setDecryptError(null);
     setDecryptedContent(null);
+    if (downloadUrl) {
+      URL.revokeObjectURL(downloadUrl);
+      setDownloadUrl(null);
+    }
 
     try {
       // Step 1: Verify NFT approval via the DRM contract
@@ -128,12 +170,8 @@ export function GatedPage() {
         throw new Error('You do not have decryption approval for this NFT.');
       }
 
-      // Step 2: Request decryption authorization from NEAR MPC network
-      // MPC verifies the request originates from valid contract logic and
-      // that the caller holds an active NEP-178 approval for the token.
-      const cid = token.media.replace('ipfs://', '');
-      const gatewayUrl = `https://ipfs.io/ipfs/${cid}`;
-      const response = await fetch(gatewayUrl);
+      // Step 2: Fetch the protected file from IPFS or any public link.
+      const response = await fetch(resolveMediaUrl(token.media));
 
       if (!response.ok) {
         throw new Error(`Failed to fetch encrypted file: ${response.statusText}`);
@@ -144,11 +182,30 @@ export function GatedPage() {
       // Step 3: Decrypt via NEAR MPC CKD
       const decrypted = await nearMPC.decryptWithMPC({
         ciphertext,
-        keyId: mpcKeyId || `mpc-${tokenId}-${getAccountId()!}-decryption`,
+        keyId:
+          token.decryption_key_cid ||
+          mpcKeyId ||
+          `mpc-${tokenId}-${getAccountId()!}-decryption`,
         accountId: getAccountId()!,
         tokenId: tokenId!,
         mpcProof: mpcProof || `mpc-proof-${tokenId}`,
       });
+
+      // Files uploaded through the Mint page are stored as base64 so the
+      // original binary can be downloaded again.
+      const extra = parseExtra(token.extra);
+      if (extra?.content_encoding === 'base64') {
+        try {
+          const blob = base64ToBlob(
+            decrypted,
+            extra.file_type || 'application/octet-stream'
+          );
+          setDownloadUrl(URL.createObjectURL(blob));
+          setDownloadName(extra.file_name || 'protected-file');
+        } catch {
+          // Fall back to showing the decrypted text below.
+        }
+      }
 
       setDecryptedContent(decrypted);
       setStatus('File decrypted via NEAR MPC!');
@@ -252,7 +309,7 @@ export function GatedPage() {
         <div className="decrypt-section">
           <h2>Decrypt</h2>
           <p>
-            Encrypted file CID: <code>{token.media.replace('ipfs://', '')}</code>
+            Protected file: <code>{token.media.replace('ipfs://', '')}</code>
           </p>
           <p>
             To decrypt: NEAR's MPC network (17 nodes, 11-of-17 threshold)
@@ -269,11 +326,34 @@ export function GatedPage() {
 
           {decryptedContent ? (
             <>
-              <h3>Decrypted Content</h3>
-              <div style={{ whiteSpace: 'pre-wrap', backgroundColor: '#f5f5f5', padding: '1rem', borderRadius: '4px', border: '1px solid #ddd' }}>
-                {decryptedContent}
-              </div>
-              <button onClick={() => setDecryptedContent(null)} className="btn btn-outline">
+              <h3>Your file is ready</h3>
+              {downloadUrl ? (
+                <>
+                  <p>The original file has been restored and is ready to download.</p>
+                  <a
+                    href={downloadUrl}
+                    download={downloadName}
+                    className="btn btn-primary"
+                  >
+                    Download {downloadName}
+                  </a>
+                </>
+              ) : (
+                <div style={{ whiteSpace: 'pre-wrap', backgroundColor: '#f5f5f5', padding: '1rem', borderRadius: '4px', border: '1px solid #ddd' }}>
+                  {decryptedContent}
+                </div>
+              )}
+              <button
+                onClick={() => {
+                  setDecryptedContent(null);
+                  if (downloadUrl) {
+                    URL.revokeObjectURL(downloadUrl);
+                    setDownloadUrl(null);
+                  }
+                }}
+                className="btn btn-outline"
+                style={{ marginLeft: downloadUrl ? '0.5rem' : 0 }}
+              >
                 Clear
               </button>
             </>
@@ -303,13 +383,13 @@ export function GatedPage() {
             </div>
           )}
           <a
-            href={`https://ipfs.io/ipfs/${token.media.replace('ipfs://', '')}`}
+            href={resolveMediaUrl(token.media)}
             target="_blank"
             rel="noopener noreferrer"
             className="btn btn-outline"
             style={{ marginLeft: '0.5rem' }}
           >
-            Open Encrypted File (Raw)
+            Open protected file (raw)
           </a>
         </div>
       )}

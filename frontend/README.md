@@ -6,7 +6,7 @@ React/TypeScript frontend for the Decentralized Digital Rights Management (DRM) 
 
 | Page | Route | Description |
 |------|-------|-------------|
-| Mint | `/mint` | Creator uploads encrypted file CID and mints a DRM NFT |
+| Mint | `/mint` | Creator adds a file, sets access rules, and mints a DRM NFT |
 | Gated | `/gated/:tokenId` | Holder-only page — access controlled by NEP-178 approvals |
 | History | `/history/:tokenId` | Per-NFT history: owner, sub-account, lock state, metadata |
 
@@ -27,3 +27,15 @@ Uses `near-api-js` to call:
 
 - Network: NEAR Testnet
 - Contract ID: `vault.testnet` (update in `.env`)
+- Optional: `REACT_APP_IPFS_UPLOAD_URL` overrides the default IPFS upload endpoint used by the Mint page (`https://api.thegraph.com/ipfs/api/v0/add`)
+
+## Mint Flow
+
+The Mint page is written for non-technical creators:
+
+1. Add a title and description.
+2. Choose a file (up to 5 MB). It is encrypted in the browser and the protected copy is uploaded to IPFS automatically.
+3. Choose how long access lasts, whether it is single-use, and the resale royalty.
+4. Confirm one wallet transaction.
+
+Creators who already have a protected file online can switch to **I already have a link** and paste the URL instead.

@@ -12,7 +12,47 @@ let selector: WalletSelector | null = null;
 let modal: WalletSelectorModal | null = null;
 let activeWallet: any = null;
 let accountId: string | null = null;
+let selectedWalletId: string | null = null;
+let walletName: string | null = null;
 let onAccountChangeCallback: ((accountId: string | null) => void) | null = null;
+
+/**
+ * Resolve the human-friendly name of a wallet (e.g. "Meteor Wallet")
+ * from the wallet selector's module metadata.
+ */
+function resolveWalletName(id: string | null): string | null {
+  if (!selector || !id) return null;
+  const module = selector.store.getState().modules.find((m) => m.id === id);
+  return module?.metadata?.name ?? null;
+}
+
+/**
+ * Restore the connected account/wallet from the wallet selector's persisted
+ * store. The selector persists accounts and selected wallet in localStorage,
+ * so this repopulates our state after a page refresh.
+ */
+async function restoreFromStore() {
+  if (!selector) return;
+  const state = selector.store.getState();
+  const active = state.accounts.find((a) => a.active) ?? state.accounts[0];
+  const id = state.selectedWalletId;
+
+  if (active && id) {
+    accountId = active.accountId;
+    selectedWalletId = id;
+    walletName = resolveWalletName(id);
+    try {
+      activeWallet = await selector.wallet(id);
+    } catch (e) {
+      activeWallet = null;
+    }
+  } else {
+    accountId = null;
+    selectedWalletId = null;
+    walletName = null;
+    activeWallet = null;
+  }
+}
 
 /**
  * Initialize the NEAR Wallet Selector and its modal UI.
@@ -48,11 +88,19 @@ export async function initWalletSelector() {
     theme: 'auto',
   });
 
+  // Restore a previously connected session on page load.
+  await restoreFromStore();
+  if (accountId) {
+    onAccountChangeCallback?.(accountId);
+  }
+
   // Handle sign-in from the modal or programmatic sign-in
-  selector.on('signedIn', async (event: any) => {
+  selector.on('signedIn', async (event) => {
     if (!selector) return;
     if (event.accounts && event.accounts.length > 0) {
       accountId = event.accounts[0].accountId;
+      selectedWalletId = event.walletId;
+      walletName = resolveWalletName(event.walletId);
       try {
         activeWallet = await selector.wallet(event.walletId);
       } catch (e) {
@@ -64,8 +112,20 @@ export async function initWalletSelector() {
 
   selector.on('signedOut', () => {
     accountId = null;
+    selectedWalletId = null;
+    walletName = null;
     activeWallet = null;
     onAccountChangeCallback?.(null);
+  });
+
+  selector.on('accountsChanged', (event) => {
+    const active = event.accounts[0];
+    if (active) {
+      accountId = active.accountId;
+      selectedWalletId = event.walletId;
+      walletName = resolveWalletName(event.walletId);
+      onAccountChangeCallback?.(accountId);
+    }
   });
 
   return selector;
@@ -90,7 +150,7 @@ export function onAccountChange(callback: (accountId: string | null) => void) {
 }
 
 /**
- * Sign in with a specific wallet (e.g. 'myNearWallet', 'nearWallet').
+ * Sign in with a specific wallet (e.g. 'meteor-wallet', 'hot-wallet').
  * Returns the connected account ID.
  */
 export async function signIn(walletId: string) {
@@ -110,6 +170,8 @@ export async function signIn(walletId: string) {
 
   if (accounts.length > 0) {
     accountId = accounts[0].accountId;
+    selectedWalletId = walletId;
+    walletName = resolveWalletName(walletId) ?? wallet.metadata?.name ?? null;
     activeWallet = wallet;
     onAccountChangeCallback?.(accountId);
   }
@@ -120,17 +182,50 @@ export async function signIn(walletId: string) {
 /**
  * Sign out from the connected wallet.
  */
-export async function signOut() {
+export async function signOut(): Promise<boolean> {
+  if (!selector) {
+    return false;
+  }
+
+  // Ensure we have a wallet instance to call signOut on.
+  if (!activeWallet && selectedWalletId) {
+    try {
+      activeWallet = await selector.wallet(selectedWalletId);
+    } catch (e) {
+      // ignore
+    }
+  }
+
   if (activeWallet) {
     try {
       await activeWallet.signOut();
     } catch (e) {
-      // ignore sign out errors
+      // The user may have cancelled the request. We verify the real state below
+      // instead of assuming the disconnect succeeded.
     }
-    activeWallet = null;
-    accountId = null;
   }
+
+  // Check the wallet selector's actual state: the core dispatches
+  // WALLET_DISCONNECTED only when the wallet truly signs out.
+  const state = selector.store.getState();
+  const stillSignedIn = state.accounts.length > 0;
+
+  if (stillSignedIn) {
+    // Disconnect was cancelled or failed — keep the session intact.
+    await restoreFromStore();
+    if (accountId) {
+      onAccountChangeCallback?.(accountId);
+    }
+    return false;
+  }
+
+  // Confirmed signed out.
+  accountId = null;
+  selectedWalletId = null;
+  walletName = null;
+  activeWallet = null;
   onAccountChangeCallback?.(null);
+  return true;
 }
 
 /**
@@ -138,6 +233,14 @@ export async function signOut() {
  */
 export function getAccountId(): string | null {
   return accountId;
+}
+
+/**
+ * Returns the connected wallet provider name (e.g. "Meteor Wallet"),
+ * or null if not signed in.
+ */
+export function getWalletName(): string | null {
+  return walletName;
 }
 
 /**
