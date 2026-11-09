@@ -1,13 +1,12 @@
 use near_sdk::borsh::{BorshDeserialize, BorshSerialize};
 use near_sdk::near;
-use near_sdk::serde::{Deserialize, Serialize};
 use near_sdk::{AccountId, Timestamp};
 
 pub type TokenId = String;
 
 /// Metadata for an NFT token.
 #[near(serializers = [json, borsh])]
-#[derive(Clone, Debug, Serialize, Deserialize, BorshSerialize, BorshDeserialize)]
+#[derive(Clone, Debug)]
 pub struct TokenMetadata {
     pub title: Option<String>,
     pub description: Option<String>,
@@ -29,7 +28,7 @@ pub struct TokenMetadata {
 
 /// Access rules governing viewing / decryption of token metadata.
 #[near(serializers = [json, borsh])]
-#[derive(Clone, Debug, Serialize, Deserialize, BorshSerialize, BorshDeserialize)]
+#[derive(Clone, Debug)]
 pub struct AccessRules {
     pub ttl_hours: Option<u64>,
     pub single_use: Option<bool>,
@@ -38,7 +37,7 @@ pub struct AccessRules {
 
 /// Lock state of a token during cross-contract transfers.
 #[near(serializers = [json, borsh])]
-#[derive(Clone, Debug, PartialEq, Serialize, Deserialize, BorshSerialize, BorshDeserialize)]
+#[derive(Clone, Debug, PartialEq)]
 pub enum LockState {
     Active,
     Locked,
@@ -46,7 +45,7 @@ pub enum LockState {
 
 /// An approval granted by a token owner to another account.
 #[near(serializers = [json, borsh])]
-#[derive(Clone, Debug, Serialize, Deserialize, BorshSerialize, BorshDeserialize)]
+#[derive(Clone, Debug)]
 pub struct Approval {
     pub account_id: AccountId,
     pub approval_id: u64,

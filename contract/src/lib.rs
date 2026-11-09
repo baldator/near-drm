@@ -7,14 +7,10 @@ mod view;
 
 use near_sdk::collections::{LazyOption, LookupMap};
 use near_sdk::near;
-use near_sdk::{near_bindgen, AccountId};
+use near_sdk::AccountId;
 
-use crate::approval::*;
-use crate::mint::*;
-use crate::state::{Contract, StorageKey};
-use crate::transfer::*;
-use crate::types::*;
-use crate::view::*;
+use crate::state::{Contract, ContractExt, StorageKey};
+use crate::types::TokenMetadata;
 
 #[near]
 impl Contract {

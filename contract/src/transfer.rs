@@ -1,7 +1,7 @@
 use near_sdk::collections::UnorderedSet;
 use near_sdk::{env, near, AccountId, Gas, NearToken, Promise, PromiseOrValue};
 
-use crate::state::{tokens_per_owner_prefix, Contract, StorageKey};
+use crate::state::{tokens_per_owner_prefix, Contract, ContractExt};
 use crate::types::{LockState, PendingTransfer, TokenId};
 
 const GAS_FOR_TRANSFER_CALL: Gas = Gas::from_tgas(25);

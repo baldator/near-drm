@@ -1,7 +1,7 @@
 use near_sdk::collections::{LookupMap, UnorderedSet};
 use near_sdk::{env, near, AccountId};
 
-use crate::state::{tokens_per_owner_prefix, Contract, StorageKey};
+use crate::state::{tokens_per_owner_prefix, Contract, ContractExt, StorageKey};
 use crate::types::{LockState, TokenId, TokenMetadata};
 
 #[near]

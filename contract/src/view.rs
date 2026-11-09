@@ -1,7 +1,7 @@
 use near_sdk::json_types::U128;
 use near_sdk::{near, AccountId};
 
-use crate::state::Contract;
+use crate::state::{Contract, ContractExt};
 use crate::types::{LockState, TokenId, TokenMetadata};
 
 #[near]

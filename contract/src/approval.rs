@@ -2,7 +2,7 @@ use near_sdk::collections::LookupMap;
 use near_sdk::json_types::U128;
 use near_sdk::{env, near, AccountId, Timestamp};
 
-use crate::state::{Contract, StorageKey};
+use crate::state::{Contract, ContractExt, StorageKey};
 use crate::types::{Approval, LockState, TokenId};
 
 #[near]
