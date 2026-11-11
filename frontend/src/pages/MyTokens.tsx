@@ -3,7 +3,6 @@ import { Link } from 'react-router-dom';
 import { formatAccessDeadline } from '../components/AccessList';
 import { contract, getAccountId, isSignedIn } from '../services/contract';
 import type { TokenApproval } from '../services/contract';
-import { resolveMediaUrl } from '../services/ipfs';
 
 interface StatusMessage {
   tone: 'info' | 'success' | 'error';
