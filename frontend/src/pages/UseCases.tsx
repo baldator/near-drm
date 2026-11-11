@@ -4,7 +4,12 @@ import { Link } from 'react-router-dom';
 const USE_CASES = [
   {
     title: 'Paid Macro Research & Investment Newsletters',
+    shortTitle: 'Research & Newsletters',
+    icon: '📈',
     badge: 'Use Case 1',
+    summary:
+      'Sell time-boxed access to paid research without losing control of every forwarded PDF.',
+    tags: ['Subscriptions', 'Zero forwarding', 'Sellable cash flow'],
     problem:
       'Financial analysts and hedge fund alumni charge $2,000–$10,000/year for boutique investment intelligence. Subscribers routinely share their logins or forward weekly PDF teardowns to non-paying peers, decimating author revenue.',
     implementation: [
@@ -17,7 +22,12 @@ const USE_CASES = [
   },
   {
     title: 'Virtual Data Rooms (VDR) & Confidential M&A Diligence',
+    shortTitle: 'M&A Data Rooms',
+    icon: '🏦',
     badge: 'Use Case 2',
+    summary:
+      'Run confidential diligence with links that expire, cannot be forwarded, and can be revoked mid-deal.',
+    tags: ['Diligence', 'Watermarked', 'Single-use'],
     problem:
       'Founders and investment bankers use DocSend or Intralinks for fundraising and M&A due diligence. Traditional links leak when unvetted viewers inspect browser network caches or share viewing links.',
     implementation: [
@@ -30,7 +40,12 @@ const USE_CASES = [
   },
   {
     title: 'B2B Engineering Blueprints & Proprietary IP Licensing',
+    shortTitle: 'IP Licensing',
+    icon: '🧪',
     badge: 'Use Case 3',
+    summary:
+      'License CAD files, schematics, and formulas to enterprises with automated, revocable access.',
+    tags: ['Annual licenses', 'Sub-accounts', 'Royalty routing'],
     problem:
       'Semiconductor schematics, industrial CAD files, and proprietary chemical formulas require ongoing annual licensing. Managing API keys or vendor portals across dozens of enterprise licensees creates significant credential-management overhead.',
     implementation: [
@@ -43,7 +58,12 @@ const USE_CASES = [
   },
   {
     title: 'Accredited Professional Courses & Certification Vaults',
+    shortTitle: 'Course Vaults',
+    icon: '🎓',
     badge: 'Use Case 4',
+    summary:
+      'Protect high-ticket course material with wallet-free onboarding and an on-chain enrollment ledger.',
+    tags: ['Passkeys', 'Per-module access', 'Proof of enrollment'],
     problem:
       'Instructors selling high-ticket ($500–$3,000) cohort-based training materials and trade-secret frameworks face rampant account sharing and course piracy on file-sharing sites.',
     implementation: [
@@ -61,75 +81,147 @@ export function UseCasesPage() {
   const useCase = USE_CASES[activeIndex];
 
   return (
-    <div className="landing">
-      <nav className="nav-links">
-        <Link to="/" className="btn btn-outline">
-          ← Back to Home
-        </Link>
-      </nav>
-
-      <section className="section use-cases-hero">
-        <h2>Real-World Applications</h2>
+    <div className="doc-page">
+      <header className="doc-hero doc-hero--cases">
+        <span className="doc-eyebrow">Use cases</span>
+        <h1>Real-world applications for programmable documents.</h1>
         <p>
           How creators, analysts, founders, and instructors turn high-value
-          documents into programmable, monetizable vaults on NEAR — without
-          passwords, platform lock-in, or 30% intermediary fees.
+          documents into monetizable vaults on NEAR — without passwords,
+          platform lock-in, or 30% intermediary fees.
         </p>
 
-        <div className="tab-list" role="tablist" aria-label="Use cases">
-          {USE_CASES.map((uc, index) => (
+        <div
+          className="doc-case-tabs"
+          role="tablist"
+          aria-label="Use cases"
+        >
+          {USE_CASES.map((useCaseOption, index) => (
             <button
-              key={index}
+              key={useCaseOption.badge}
+              type="button"
               role="tab"
               aria-selected={activeIndex === index}
-              className={`tab-btn ${activeIndex === index ? 'tab-btn--active' : ''}`}
+              className={`doc-case-tab${
+                activeIndex === index ? ' is-active' : ''
+              }`}
               onClick={() => setActiveIndex(index)}
             >
-              <span className="tab-badge">{uc.badge}</span>
-              <span className="tab-title">{uc.title}</span>
+              <span className="doc-case-tab-icon" aria-hidden="true">
+                {useCaseOption.icon}
+              </span>
+              <span className="doc-case-tab-badge">
+                {useCaseOption.badge}
+              </span>
+              <span className="doc-case-tab-title">
+                {useCaseOption.shortTitle}
+              </span>
             </button>
           ))}
         </div>
-      </section>
+      </header>
 
-      <section className="section use-case-detail" aria-labelledby="use-case-title">
-        <div className="use-case-card">
-          <div className="use-case-header">
-            <div className="use-case-badge">{useCase.badge}</div>
-            <h3 id="use-case-title">{useCase.title}</h3>
+      <section className="doc-case-detail" aria-labelledby="use-case-title">
+        <div className="doc-case-card">
+          <div className="doc-case-header">
+            <span className="doc-case-icon" aria-hidden="true">
+              {useCase.icon}
+            </span>
+            <div>
+              <span className="doc-badge">{useCase.badge}</span>
+              <h2 id="use-case-title">{useCase.title}</h2>
+              <p>{useCase.summary}</p>
+              <div className="doc-tags">
+                {useCase.tags.map((tag) => (
+                  <span key={tag} className="doc-tag">
+                    {tag}
+                  </span>
+                ))}
+              </div>
+            </div>
           </div>
 
-          <div className="use-case-grid">
-            <div className="use-case-panel use-case-panel--problem">
-              <h4>The Problem</h4>
+          <div className="doc-case-grid">
+            <div className="doc-panel doc-panel--problem">
+              <h3>
+                <span aria-hidden="true">⚠️</span> The problem
+              </h3>
               <p>{useCase.problem}</p>
             </div>
-            <div className="use-case-panel use-case-panel--solution">
-              <h4>The Implementation</h4>
+            <div className="doc-panel doc-panel--solution">
+              <h3>
+                <span aria-hidden="true">🛠</span> How the vault solves it
+              </h3>
               <ul>
-                {useCase.implementation.map((step, i) => (
-                  <li key={i}>{step}</li>
+                {useCase.implementation.map((step, index) => (
+                  <li key={index}>{step}</li>
                 ))}
               </ul>
             </div>
           </div>
 
-          <div className="use-case-advantage">
-            <strong>The Asset Advantage:</strong> {useCase.advantage}
+          <div className="doc-advantage">
+            <strong>The asset advantage</strong>
+            <p>{useCase.advantage}</p>
           </div>
         </div>
       </section>
 
-      <section className="cta">
-        <h2>Start publishing without leaks.</h2>
-        <p>
-          Mint your first document vault on NEAR — subscribers pay by card,
-          you keep 100% of the sovereignty.
-        </p>
-        <br />
-        <Link to="/mint" className="btn btn-primary">
-          Create Your First Vault
-        </Link>
+      <section className="doc-pattern">
+        <div className="doc-pattern-header">
+          <span className="doc-eyebrow doc-eyebrow--dark">The pattern</span>
+          <h2>Every use case follows the same three moves.</h2>
+        </div>
+        <div className="doc-feature-grid">
+          <div className="doc-feature">
+            <span className="doc-feature-icon" aria-hidden="true">
+              🔐
+            </span>
+            <strong>Protect the file</strong>
+            <span>
+              Content is encrypted before it reaches storage. The chain only
+              sees a content address and access rules.
+            </span>
+          </div>
+          <div className="doc-feature">
+            <span className="doc-feature-icon" aria-hidden="true">
+              ✅
+            </span>
+            <strong>Approve each reader</strong>
+            <span>
+              NEP-178 approvals bind access to one wallet for a fixed window —
+              one view, a day, or a month.
+            </span>
+          </div>
+          <div className="doc-feature">
+            <span className="doc-feature-icon" aria-hidden="true">
+              🔁
+            </span>
+            <strong>Transfer the whole business</strong>
+            <span>
+              Selling the NFT moves the asset, the access rules, the treasury,
+              and future cash flows in one settlement.
+            </span>
+          </div>
+        </div>
+      </section>
+
+      <section className="doc-cta">
+        <div>
+          <h2>Start publishing without leaks.</h2>
+          <p>
+            Mint your first document vault on NEAR — readers get frictionless
+            access and you keep 100% of the sovereignty.
+          </p>
+        </div>
+        <div className="doc-cta-actions">
+          <Link to="/mint" className="btn btn-primary">
+            Create your first vault
+          </Link>
+          <Link to="/docs" className="btn btn-ghost">
+            Read the docs
+          </Link>
+        </div>
       </section>
     </div>
   );

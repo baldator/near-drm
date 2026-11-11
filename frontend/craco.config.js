@@ -28,4 +28,35 @@ module.exports = {
       return webpackConfig;
     },
   },
+  // Proxy NEAR RPC through the dev server in local development so browser
+  // fetch() calls are same-origin (rpc.testnet.near.org does not emit
+  // Access-Control-Allow-Origin, which would otherwise trigger CORS blocks).
+  devServer: (config) => {
+    return {
+      ...config,
+      proxy: {
+        ...(config.proxy || {}),
+        '/near-rpc': {
+          target: 'https://rpc.testnet.near.org',
+          changeOrigin: true,
+          secure: false,
+          headers: {
+            'Access-Control-Allow-Origin': '*',
+          },
+        },
+        // Proxy the public IPFS gateway through the dev server in local
+        // development so browser fetch() calls are same-origin. ipfs.io does
+        // not emit Access-Control-Allow-Origin, which otherwise triggers CORS
+        // blocks when downloading protected files from http://localhost:3000.
+        '/ipfs': {
+          target: 'https://ipfs.io',
+          changeOrigin: true,
+          secure: false,
+          headers: {
+            'Access-Control-Allow-Origin': '*',
+          },
+        },
+      },
+    };
+  },
 };

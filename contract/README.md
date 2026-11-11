@@ -38,3 +38,18 @@ near deploy neardrm.testnet \
 near view neardrm.testnet nft_metadata
 near view neardrm.testnet nft_total_supply
 ```
+
+## Query approvals
+
+```bash
+# All active approvals on a token
+near view neardrm.testnet nft_approvals '{"token_id": "token-1"}'
+
+# All active approvals granted to an account, across every token
+near view neardrm.testnet nft_approvals_for_account \
+  '{"account_id": "bob.testnet", "from_index": null, "limit": 100}'
+```
+
+Both views omit approvals whose `expires_at` has passed. Approval access is per-token,
+so querying by account walks a per-account index maintained by `nft_approve`,
+`nft_revoke`, and transfers.

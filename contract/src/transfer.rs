@@ -44,7 +44,7 @@ impl Contract {
         let mut updated_token = token;
         updated_token.owner_id = receiver_id.clone();
         self.owner_of.insert(&token_id, &receiver_id);
-        self.internal_clear_approvals(&token_id);
+        self.internal_clear_approvals(&token_id, &mut updated_token);
         self.token_lock_state.insert(&token_id, &LockState::Active);
         self.tokens_by_id.insert(&token_id, &updated_token);
         let memo_str = memo.as_deref().unwrap_or("");
@@ -103,7 +103,7 @@ impl Contract {
         let mut updated_token = token;
         updated_token.owner_id = receiver_id.clone();
         self.owner_of.insert(&token_id, &receiver_id);
-        self.internal_clear_approvals(&token_id);
+        self.internal_clear_approvals(&token_id, &mut updated_token);
         self.tokens_by_id.insert(&token_id, &updated_token);
 
         // Cross-contract call to receiver's nft_on_transfer using raw Promise.

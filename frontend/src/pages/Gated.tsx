@@ -1,79 +1,63 @@
-import React, { useState, useEffect } from 'react';
-import { contract, getAccountId, isSignedIn } from '../services/contract';
+import React, { useCallback, useEffect, useState } from 'react';
 import { useParams } from 'react-router-dom';
+import { AccessList } from '../components/AccessList';
+import { contract, getAccountId, isSignedIn } from '../services/contract';
+import type { NftApproval } from '../services/contract';
 import { nearMPC } from '../services/near-mpc';
+import { resolveMediaUrl } from '../services/ipfs';
 
-function resolveMediaUrl(media: string): string {
-  if (!media) return '';
-  if (media.startsWith('ipfs://')) {
-    return `https://ipfs.io/ipfs/${media.slice('ipfs://'.length)}`;
-  }
-  if (media.startsWith('http://') || media.startsWith('https://')) {
-    return media;
-  }
-  return `https://ipfs.io/ipfs/${media}`;
+interface StatusMessage {
+  tone: 'info' | 'success' | 'error';
+  text: string;
 }
 
-function parseExtra(extra: string | null | undefined): any {
-  if (!extra) return null;
-  try {
-    return JSON.parse(extra);
-  } catch {
-    return null;
-  }
-}
-
-function base64ToBlob(base64: string, type: string): Blob {
-  const binary = atob(base64);
-  const bytes = new Uint8Array(binary.length);
-  for (let index = 0; index < binary.length; index += 1) {
-    bytes[index] = binary.charCodeAt(index);
-  }
-  return new Blob([bytes], { type });
-}
+const TTL_OPTIONS = [
+  { value: '24', label: '1 day', hint: 'Access expires in 24 hours' },
+  { value: '72', label: '3 days', hint: 'Access expires in 3 days' },
+  { value: '168', label: '1 week', hint: 'Access expires in 1 week' },
+  { value: '720', label: '30 days', hint: 'Access expires in 30 days' },
+];
 
 export function GatedPage() {
   const { tokenId } = useParams();
+  const [token, setToken] = useState<any>(null);
   const [isOwner, setIsOwner] = useState(false);
   const [isApproved, setIsApproved] = useState(false);
-  const [token, setToken] = useState<any>(null);
-  const [status, setStatus] = useState('');
-  const [lockState, setLockState] = useState('');
-
-  // Owner granting access to another account
+  const [status, setStatus] = useState<StatusMessage | null>(null);
   const [grantAccount, setGrantAccount] = useState('');
   const [grantTtl, setGrantTtl] = useState('24');
-  const [revokeAccount, setRevokeAccount] = useState('');
   const [decrypting, setDecrypting] = useState(false);
   const [decryptedContent, setDecryptedContent] = useState<string | null>(null);
   const [downloadUrl, setDownloadUrl] = useState<string | null>(null);
   const [downloadName, setDownloadName] = useState('protected-file');
   const [decryptError, setDecryptError] = useState<string | null>(null);
-  const [mpcKeyId] = useState('');
-  const [mpcProof] = useState('');
+  const [approvals, setApprovals] = useState<NftApproval[]>([]);
+  const [approvalsLoading, setApprovalsLoading] = useState(false);
+  const [approvalsError, setApprovalsError] = useState<string | null>(null);
+  const [revokingAccount, setRevokingAccount] = useState<string | null>(null);
 
   useEffect(() => {
+    if (!tokenId) return;
+    // Capture the id so its narrowing survives inside the async closure
+    // (TypeScript does not preserve narrowing of outer variables in callbacks).
+    const id = tokenId;
     async function load() {
-      if (!tokenId) return;
       try {
-        const owner = await contract.nft_owner_of({ token_id: tokenId });
-        setIsOwner(owner === getAccountId()!);
+        const o = await contract.nft_owner_of({ token_id: id });
+        setIsOwner(o === (getAccountId() || ''));
 
-        const tokenData = await contract.nft_token({ token_id: tokenId });
+        const tokenData = await contract.nft_token({ token_id: id });
         setToken(tokenData);
-
-        const lock = await contract.get_lock_state({ token_id: tokenId });
-        setLockState(lock);
 
         if (isSignedIn()) {
           const approved = await contract.nft_is_approved({
-            token_id: tokenId,
+            token_id: id,
             approved_account_id: getAccountId()!,
           });
           setIsApproved(approved);
         }
       } catch (error: any) {
-        setStatus(`Error loading token: ${error.message || error.toString()}`);
+        setStatus({ tone: 'error', text: `Couldn't load this file: ${error.message || error.toString()}` });
       }
     }
     load();
@@ -86,19 +70,40 @@ export function GatedPage() {
     };
   }, [downloadUrl]);
 
+  const refreshApprovals = useCallback(async () => {
+    if (!tokenId) return;
+    setApprovalsLoading(true);
+    setApprovalsError(null);
+    try {
+      const list = await contract.nft_approvals({ token_id: tokenId });
+      setApprovals(list || []);
+    } catch (error: any) {
+      setApprovalsError(error.message || error.toString());
+    } finally {
+      setApprovalsLoading(false);
+    }
+  }, [tokenId]);
+
+  useEffect(() => {
+    refreshApprovals();
+  }, [refreshApprovals]);
+
   const handleGrantAccess = async (targetAccount: string, ttlHours: string) => {
     if (!isSignedIn()) {
-      setStatus('Please connect your wallet first.');
+      setStatus({ tone: 'error', text: 'Please connect your wallet first.' });
       return;
     }
     if (!targetAccount) {
-      setStatus('Enter an account ID to grant access to.');
+      setStatus({ tone: 'error', text: 'Enter a NEAR account ID to grant access to.' });
       return;
     }
-
-    const expiresAt = Date.now() + parseInt(ttlHours || '24') * 60 * 60 * 1000;
+    setStatus({ tone: 'info', text: `Granting access to ${targetAccount}…` });
     try {
-      setStatus(`Granting access to ${targetAccount}...`);
+      // The contract stores (and compares) `expires_at` as a NEAR block
+      // timestamp in nanoseconds, so convert the wall-clock deadline.
+      const deadlineMs =
+        Date.now() + parseInt(ttlHours || '24') * 60 * 60 * 1000;
+      const expiresAt = deadlineMs * 1_000_000;
       await contract.nft_approve({
         token_id: tokenId!,
         account_id: targetAccount,
@@ -108,10 +113,10 @@ export function GatedPage() {
           granted_by: getAccountId()!,
         }),
       });
-      setStatus(`Access granted to ${targetAccount} for ${ttlHours} hours.`);
+      setStatus({ tone: 'success', text: `Access granted to ${targetAccount} for ${ttlHours} hours.` });
       setGrantAccount('');
       setGrantTtl('24');
-      // Refresh approval status for the current user in case they granted themselves
+      await refreshApprovals();
       if (isSignedIn()) {
         const approved = await contract.nft_is_approved({
           token_id: tokenId!,
@@ -120,19 +125,21 @@ export function GatedPage() {
         setIsApproved(approved);
       }
     } catch (error: any) {
-      setStatus(`Error: ${error.message || error.toString()}`);
+      setStatus({ tone: 'error', text: `Couldn't grant access: ${error.message || error.toString()}` });
     }
   };
 
-  const handleRevoke = async (targetAccount?: string) => {
-    const account = targetAccount || getAccountId()!;
+  const handleRevoke = async (account: string) => {
+    if (!account) return;
+    setRevokingAccount(account);
+    setStatus({ tone: 'info', text: `Revoking access for ${account}…` });
     try {
-      setStatus(`Revoking access for ${account}...`);
       await contract.nft_revoke({
         token_id: tokenId!,
         account_id: account,
       });
-      setStatus(`Access revoked for ${account}.`);
+      setStatus({ tone: 'success', text: `Access revoked for ${account}.` });
+      await refreshApprovals();
       if (isSignedIn()) {
         const approved = await contract.nft_is_approved({
           token_id: tokenId!,
@@ -141,13 +148,15 @@ export function GatedPage() {
         setIsApproved(approved);
       }
     } catch (error: any) {
-      setStatus(`Error: ${error.message || error.toString()}`);
+      setStatus({ tone: 'error', text: `Couldn't revoke access: ${error.message || error.toString()}` });
+    } finally {
+      setRevokingAccount(null);
     }
   };
 
   const handleDecrypt = async () => {
     if (!isSignedIn()) {
-      setStatus('Please connect your wallet first.');
+      setStatus({ tone: 'error', text: 'Please connect your wallet first.' });
       return;
     }
 
@@ -160,186 +169,224 @@ export function GatedPage() {
     }
 
     try {
-      // Step 1: Verify NFT approval via the DRM contract
-      const isApproved = await contract.nft_is_approved({
+      const isApprovedCheck = await contract.nft_is_approved({
         token_id: tokenId!,
         approved_account_id: getAccountId()!,
       });
 
-      if (!isApproved) {
-        throw new Error('You do not have decryption approval for this NFT.');
+      if (!isApprovedCheck) {
+        throw new Error("You don't have permission to open this file.");
       }
 
-      // Step 2: Fetch the protected file from IPFS or any public link.
       const response = await fetch(resolveMediaUrl(token.media));
-
       if (!response.ok) {
-        throw new Error(`Failed to fetch encrypted file: ${response.statusText}`);
+        throw new Error(`Failed to fetch the protected file (${response.status}).`);
       }
 
       const ciphertext = await response.text();
 
-      // Step 3: Decrypt via NEAR MPC CKD
       const decrypted = await nearMPC.decryptWithMPC({
         ciphertext,
-        keyId:
-          token.decryption_key_cid ||
-          mpcKeyId ||
-          `mpc-${tokenId}-${getAccountId()!}-decryption`,
+        keyId: token.decryption_key_cid || `mpc-${tokenId}-${getAccountId()!}-decryption`,
         accountId: getAccountId()!,
         tokenId: tokenId!,
-        mpcProof: mpcProof || `mpc-proof-${tokenId}`,
+        mpcProof: `mpc-proof-${tokenId}`,
       });
 
-      // Files uploaded through the Mint page are stored as base64 so the
-      // original binary can be downloaded again.
-      const extra = parseExtra(token.extra);
-      if (extra?.content_encoding === 'base64') {
-        try {
-          const blob = base64ToBlob(
-            decrypted,
-            extra.file_type || 'application/octet-stream'
-          );
-          setDownloadUrl(URL.createObjectURL(blob));
-          setDownloadName(extra.file_name || 'protected-file');
-        } catch {
-          // Fall back to showing the decrypted text below.
-        }
-      }
-
+      const blob = new Blob([decrypted], { type: 'text/plain' });
+      const url = URL.createObjectURL(blob);
+      setDownloadUrl(url);
+      setDownloadName(token.extra?.file_name || 'protected-file');
       setDecryptedContent(decrypted);
-      setStatus('File decrypted via NEAR MPC!');
+      setStatus({ tone: 'success', text: 'The file is ready to download.' });
     } catch (error: any) {
       setDecryptError(error.message || error.toString());
-      setStatus('Decryption failed.');
+      setStatus({ tone: 'error', text: "Couldn't open the file." });
     } finally {
       setDecrypting(false);
     }
   };
 
-  if (!token) return <div>Loading token...</div>;
+  if (!token) {
+    return (
+      <div className="gated-page">
+        <header className="gated-hero">
+          <span className="gated-eyebrow">Protected file</span>
+          <h1>Loading…</h1>
+        </header>
+        <div className="gated-loading">Loading file details…</div>
+      </div>
+    );
+  }
 
   return (
-    <div className="page gated-page">
-      <h1>DRM Asset: {token.title || 'Untitled'}</h1>
-      <div className="status">{status}</div>
+    <div className="gated-page">
+      <header className="gated-hero">
+        <span className="gated-eyebrow">Protected file</span>
+        <h1>{token.title || 'Untitled'}</h1>
+        <p>{token.description || 'A protected collectible file.'}</p>
+      </header>
 
-      <div className="token-info">
-        <p><strong>Token ID:</strong> {tokenId}</p>
-        <p><strong>Description:</strong> {token.description || 'N/A'}</p>
-        <p><strong>Encrypted File:</strong> {token.media}</p>
-        <p><strong>Sub-account:</strong> {token.sub_account_id}</p>
-        <p><strong>Lock State:</strong> {lockState}</p>
-        <p><strong>Royalty:</strong> {token.royalty_percentage} basis points</p>
-      </div>
+      {status && (
+        <div className={`gated-status gated-status-${status.tone}`}>
+          <span>{status.tone === 'success' ? '✓' : status.tone === 'error' ? '!' : 'i'}</span>
+          <p>{status.text}</p>
+        </div>
+      )}
 
-      <div className="access-section">
-        <h2>Access Control</h2>
-        <p>Current account: {getAccountId()!}</p>
-        <p>Is Owner: {isOwner ? 'Yes' : 'No'}</p>
-        <p>Your decryption access: {isApproved ? 'Yes' : 'No'}</p>
+      {!isSignedIn() && (
+        <div className="gated-connect-banner">
+          <strong>Connect your wallet</strong>
+          <p>Sign in to open this file or manage access.</p>
+        </div>
+      )}
 
+      <div className="gated-access-badge">
         {isOwner ? (
-          <>
-            <h3>Grant Access (Owner)</h3>
-            <p>
-              Grant decryption access to another NEAR account. Each grant can have
-              its own TTL policy.
-            </p>
-            <div className="grant-form">
-              <input
-                type="text"
-                placeholder="NEAR account ID (e.g. alice.testnet)"
-                value={grantAccount}
-                onChange={(e) => setGrantAccount(e.target.value)}
-              />
-              <input
-                type="number"
-                placeholder="TTL hours"
-                value={grantTtl}
-                onChange={(e) => setGrantTtl(e.target.value)}
-                min="1"
-              />
-              <button
-                onClick={() => handleGrantAccess(grantAccount, grantTtl)}
-                className="btn btn-primary"
-              >
-                Grant Access
-              </button>
-            </div>
-            <p className="hint">
-              The owner can grant access to multiple accounts, each with a
-              different TTL policy.
-            </p>
-            <div className="revoke-form">
-              <input
-                type="text"
-                placeholder="NEAR account ID to revoke"
-                value={revokeAccount}
-                onChange={(e) => setRevokeAccount(e.target.value)}
-              />
-              <button
-                onClick={() => handleRevoke(revokeAccount)}
-                className="btn btn-outline"
-              >
-                Revoke Access for Account
-              </button>
-            </div>
-          </>
+          <span className="gated-badge gated-badge-owner">👑 You own this</span>
+        ) : isApproved ? (
+          <span className="gated-badge gated-badge-approved">✓ You can open this</span>
         ) : (
-          <>
-            {isApproved ? (
-              <>
-                <p className="success">✓ You have decryption access!</p>
-                <button onClick={() => handleRevoke()} className="btn btn-outline">
-                  Revoke My Access
-                </button>
-              </>
-            ) : (
-              <p>
-                You do not own this NFT and have not been granted decryption
-                access. Ask the owner to grant you access.
-              </p>
-            )}
-          </>
+          <span className="gated-badge gated-badge-locked">🔒 Access not granted</span>
         )}
       </div>
 
-      {isApproved && token.media && (
-        <div className="decrypt-section">
-          <h2>Decrypt</h2>
+      {!isOwner && !isApproved && (
+        <div className="gated-empty">
           <p>
-            Protected file: <code>{token.media.replace('ipfs://', '')}</code>
+            Only the owner can share this file. If you know the owner, ask them
+            to grant you access.
           </p>
-          <p>
-            To decrypt: NEAR's MPC network (17 nodes, 11-of-17 threshold)
-            derives the decryption key via Confidential Key Derivation. The MPC
-            network verifies your NEP-178 approval for this token before
-            releasing the plaintext.
-          </p>
+        </div>
+      )}
 
-          {decryptError && (
-            <div className="status" style={{ backgroundColor: '#fdecea', color: '#b3261e' }}>
-              Decryption error: {decryptError}
+      {isOwner && (
+        <section className="gated-step">
+          <div className="gated-step-heading">
+            <div className="gated-step-number">1</div>
+            <div>
+              <h2>Share access</h2>
+              <p>Let someone else open this file for a limited time.</p>
+            </div>
+          </div>
+          <div className="gated-field">
+            <div className="gated-label-row">
+              <label htmlFor="gated-account">NEAR account (e.g. alice.testnet)</label>
+              <span className="gated-badge gated-badge-required">Required</span>
+            </div>
+            <input
+              id="gated-account"
+              className="gated-input"
+              type="text"
+              value={grantAccount}
+              onChange={(e) => setGrantAccount(e.target.value)}
+              placeholder="Enter a NEAR account ID"
+              autoComplete="off"
+            />
+            <p className="gated-help">
+              This is the NEAR account ID of the person you want to share with.
+            </p>
+          </div>
+          <div className="gated-field">
+            <div className="gated-label-row">
+              <label htmlFor="gated-ttl">Access lasts for</label>
+              <span className="gated-badge gated-badge-optional">Optional</span>
+            </div>
+            <div className="gated-choice-grid">
+              {TTL_OPTIONS.map((opt) => (
+                <div
+                  key={opt.value}
+                  className={`gated-choice${grantTtl === opt.value ? ' is-selected' : ''}`}
+                  onClick={() => setGrantTtl(opt.value)}
+                >
+                  <input
+                    type="radio"
+                    name="gated-ttl"
+                    value={opt.value}
+                    checked={grantTtl === opt.value}
+                    readOnly
+                  />
+                  <div className="gated-choice-body">
+                    <strong>{opt.label}</strong>
+                    <span>{opt.hint}</span>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+          <button
+            className="btn btn-primary"
+            onClick={() => handleGrantAccess(grantAccount, grantTtl)}
+            disabled={!grantAccount}
+          >
+            Grant access
+          </button>
+        </section>
+      )}
+
+      <section className="gated-step gated-access-section">
+        <div className="gated-step-heading">
+          <div>
+            <h2>People with access</h2>
+            <p>
+              {isOwner
+                ? 'These accounts can open this file until their deadline. Revoke access at any time.'
+                : 'These accounts can open this file until their deadline.'}
+            </p>
+          </div>
+        </div>
+        {approvalsError ? (
+          <p className="access-empty">
+            Couldn't load the people with access: {approvalsError}
+          </p>
+        ) : (
+          <AccessList
+            approvals={approvals}
+            loading={approvalsLoading}
+            emptyText="No one else has access to this file yet."
+            onRevoke={isOwner ? handleRevoke : undefined}
+            revokingAccountId={revokingAccount}
+          />
+        )}
+      </section>
+
+      {(isOwner || isApproved) && (
+        <section className="gated-step">
+          <div className="gated-step-heading">
+            <div className="gated-step-number">2</div>
+            <div>
+              <h2>Open the file</h2>
+              <p>Decrypt and download your protected file.</p>
+            </div>
+          </div>
+          {decrypting && (
+            <div className="gated-progress">
+              <span className="gated-spinner" aria-hidden="true" />
+              Opening…
             </div>
           )}
-
+          {decryptError && (
+            <div className="gated-status gated-status-error">
+              <span>!</span>
+              <p>{decryptError}</p>
+            </div>
+          )}
           {decryptedContent ? (
             <>
-              <h3>Your file is ready</h3>
+              <div className="gated-status gated-status-success">
+                <span>✓</span>
+                <p>The file is ready.</p>
+              </div>
               {downloadUrl ? (
-                <>
-                  <p>The original file has been restored and is ready to download.</p>
-                  <a
-                    href={downloadUrl}
-                    download={downloadName}
-                    className="btn btn-primary"
-                  >
-                    Download {downloadName}
-                  </a>
-                </>
+                <a
+                  href={downloadUrl}
+                  download={downloadName}
+                  className="btn btn-primary"
+                >
+                  Download {downloadName}
+                </a>
               ) : (
-                <div style={{ whiteSpace: 'pre-wrap', backgroundColor: '#f5f5f5', padding: '1rem', borderRadius: '4px', border: '1px solid #ddd' }}>
+                <div className="gated-decrypted-preview">
                   {decryptedContent}
                 </div>
               )}
@@ -352,47 +399,22 @@ export function GatedPage() {
                   }
                 }}
                 className="btn btn-outline"
-                style={{ marginLeft: downloadUrl ? '0.5rem' : 0 }}
               >
                 Clear
               </button>
             </>
           ) : (
             <button
-              onClick={handleDecrypt}
               className="btn btn-primary"
+              onClick={handleDecrypt}
               disabled={decrypting}
             >
-              {decrypting ? 'Decrypting...' : 'Decrypt File'}
+              {decrypting ? 'Opening…' : 'Open protected file'}
             </button>
           )}
-
-          <p className="hint" style={{ marginTop: '0.75rem' }}>
-            The encrypted file is fetched from IPFS and decrypted via NEAR MPC
-            CKD. Only accounts with an active NEP-178 approval for this token
-            can decrypt.
-          </p>
-          {mpcKeyId && (
-            <div style={{ marginTop: '0.5rem' }}>
-              <strong>MPC Key ID:</strong> <code>{mpcKeyId}</code>
-            </div>
-          )}
-          {mpcProof && (
-            <div style={{ marginTop: '0.25rem' }}>
-              <strong>MPC Proof:</strong> <code>{mpcProof}</code>
-            </div>
-          )}
-          <a
-            href={resolveMediaUrl(token.media)}
-            target="_blank"
-            rel="noopener noreferrer"
-            className="btn btn-outline"
-            style={{ marginLeft: '0.5rem' }}
-          >
-            Open protected file (raw)
-          </a>
-        </div>
+        </section>
       )}
     </div>
   );
 }
+

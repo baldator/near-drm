@@ -45,11 +45,19 @@ pub enum LockState {
 
 /// An approval granted by a token owner to another account.
 #[near(serializers = [json, borsh])]
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, PartialEq)]
 pub struct Approval {
     pub account_id: AccountId,
     pub approval_id: u64,
     pub expires_at: Option<Timestamp>,
+}
+
+/// An approval paired with the token it applies to.
+#[near(serializers = [json, borsh])]
+#[derive(Clone, Debug, PartialEq)]
+pub struct TokenApproval {
+    pub token_id: TokenId,
+    pub approval: Approval,
 }
 
 /// An NFT token stored in the contract.

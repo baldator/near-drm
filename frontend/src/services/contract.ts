@@ -16,17 +16,49 @@ import { nearMPC } from './near-mpc';
 const CONTRACT_ID = process.env.REACT_APP_CONTRACT_ID || 'neardrm.testnet';
 const NETWORK_ID = 'testnet';
 
-const nearConfig = {
+// In local development, route RPC through the dev-server proxy (/near-rpc)
+// so browser fetch() calls are same-origin. rpc.testnet.near.org does not
+// emit Access-Control-Allow-Origin, which otherwise triggers CORS blocks.
+// On any other host (production, etc.) we call the RPC node directly.
+function getNodeUrl(): string {
+  if (typeof window !== 'undefined' && window.location.hostname === 'localhost') {
+    return 'https://test.rpc.fastnear.com';
+  }
+  return 'https://test.rpc.fastnear.com';
+}
+
+const nearConfigBase = {
   networkId: NETWORK_ID,
-  nodeUrl: 'https://rpc.testnet.near.org',
   walletUrl: 'https://wallet.testnet.near.org',
   helperUrl: 'https://helper.testnet.near.org',
   explorerUrl: 'https://explorer.testnet.near.org',
 };
 
+export interface NftApproval {
+  account_id: string;
+  approval_id: number;
+  expires_at: number | null;
+}
+
+export interface TokenApproval {
+  token_id: string;
+  approval: NftApproval;
+}
+
 export interface DrmContract {
   nft_owner_of: (args: { token_id: string }) => Promise<string>;
   nft_token: (args: { token_id: string }) => Promise<any>;
+  nft_approvals: (args: { token_id: string }) => Promise<NftApproval[]>;
+  nft_approvals_for_account: (args: {
+    account_id: string;
+    from_index?: string | null;
+    limit?: number | null;
+  }) => Promise<TokenApproval[]>;
+  nft_tokens_for_owner: (args: {
+    account_id: string;
+    from_index?: string | null;
+    limit?: number | null;
+  }) => Promise<string[]>;
   nft_mint: (args: { token_id: string; owner_id: string; metadata: any }) => Promise<void>;
   nft_is_approved: (args: {
     token_id: string;
@@ -39,33 +71,98 @@ export interface DrmContract {
 }
 
 export let near: any;
-export let contract: DrmContract;
+// The contract wrapper only holds closures and never touches the network on
+// creation, so it can be created eagerly. Each view call ensures `near` is
+// initialized first. This lets pages use `contract` even when they mount
+// before ConnectButton has finished its asynchronous initialization (for
+// example when a deep link is opened or refreshed directly).
+export let contract: DrmContract = createDrmContract();
+
+let nearInitPromise: Promise<void> | null = null;
 
 export async function initNear() {
-  near = await connect({
-    deps: { keyStore: new keyStores.BrowserLocalStorageKeyStore() },
-    ...nearConfig,
-  });
+  if (near) return;
+  if (!nearInitPromise) {
+    nearInitPromise = (async () => {
+      near = await connect({
+        deps: { keyStore: new keyStores.BrowserLocalStorageKeyStore() },
+        ...nearConfigBase,
+        nodeUrl: getNodeUrl(),
+      });
 
-  // Initialize NEAR MPC (CKD) for DRM encryption/decryption
-  try {
-    await nearMPC.init();
-  } catch (error) {
-    console.warn('NEAR MPC initialization failed:', error);
+      // Initialize NEAR MPC (CKD) for DRM encryption/decryption
+      try {
+        await nearMPC.init();
+      } catch (error) {
+        console.warn('NEAR MPC initialization failed:', error);
+      }
+    })().catch((error) => {
+      // Allow a later call to retry if initialization failed.
+      nearInitPromise = null;
+      throw error;
+    });
   }
+  return nearInitPromise;
+}
+
+/**
+ * Short-lived cache for view calls. Reduces redundant RPC hits (helps stay
+ * under the public testnet rate limit) and speeds up re-mounts / refreshes.
+ */
+interface ViewCacheEntry {
+  value: any;
+  expiry: number;
+}
+const viewCache = new Map<string, ViewCacheEntry>();
+const VIEW_CACHE_TTL_MS = 15000;
+
+function getCacheKey(methodName: string, args: any): string {
+  return `${methodName}:${JSON.stringify(args)}`;
 }
 
 /**
  * Call a view method on the DRM contract (no signing required).
+ *
+ * Retries on HTTP 429 (rate limited) with exponential backoff, and serves
+ * recently-fetched results from a short-lived TTL cache.
  */
 async function viewFunction(methodName: string, args: any) {
+  if (!near) await initNear();
   const senderId = getAccountId() || CONTRACT_ID;
-  const result = await near.account(senderId).viewFunction({
-    contractId: CONTRACT_ID,
-    methodName,
-    args,
-  });
-  return result;
+  // `Near.account()` is asynchronous (it resolves to an `Account` instance).
+  // We must await it before calling `viewFunction()`: otherwise `.viewFunction`
+  // would be accessed on a pending Promise (which is `undefined`) and every
+  // view call would throw a TypeError before any RPC request is sent.
+  const account = await near.account(senderId);
+
+  const cacheKey = getCacheKey(methodName, args);
+  const cached = viewCache.get(cacheKey);
+  if (cached && cached.expiry > Date.now()) {
+    return cached.value;
+  }
+
+  let lastError: any;
+  for (let attempt = 0; attempt < 3; attempt++) {
+    try {
+      const result = await account.viewFunction({
+        contractId: CONTRACT_ID,
+        methodName,
+        args,
+      });
+      viewCache.set(cacheKey, { value: result, expiry: Date.now() + VIEW_CACHE_TTL_MS });
+      return result;
+    } catch (error: any) {
+      lastError = error;
+      const isRateLimited =
+        error?.status === 429 ||
+        error?.statusCode === 429 ||
+        (typeof error?.message === 'string' &&
+          /429|rate.?limit|too many requests/i.test(error.message));
+      if (!isRateLimited || attempt === 2) throw error;
+      await new Promise((resolve) => setTimeout(resolve, Math.pow(2, attempt) * 1000));
+    }
+  }
+  throw lastError;
 }
 
 /**
@@ -96,6 +193,10 @@ async function functionCall(methodName: string, args: any, deposit: bigint = Big
     ],
   });
 
+  // A change call can alter any view result (owner, approvals, lock state),
+  // so drop cached reads to make the next fetch observe the new state.
+  viewCache.clear();
+
   return outcome;
 }
 
@@ -103,6 +204,10 @@ export function createDrmContract(): DrmContract {
   return {
     nft_owner_of: async (args) => viewFunction('nft_owner_of', args),
     nft_token: async (args) => viewFunction('nft_token', args),
+    nft_approvals: async (args) => viewFunction('nft_approvals', args),
+    nft_approvals_for_account: async (args) =>
+      viewFunction('nft_approvals_for_account', args),
+    nft_tokens_for_owner: async (args) => viewFunction('nft_tokens_for_owner', args),
     nft_mint: async (args) => functionCall('nft_mint', args),
     nft_is_approved: async (args) => viewFunction('nft_is_approved', args),
     nft_approve: async (args) => functionCall('nft_approve', args),

@@ -1,7 +1,7 @@
 use near_sdk::collections::{LookupMap, UnorderedSet};
 use near_sdk::{env, near, AccountId};
 
-use crate::state::{tokens_per_owner_prefix, Contract, ContractExt, StorageKey};
+use crate::state::{token_approvals_prefix, tokens_per_owner_prefix, Contract, ContractExt};
 use crate::types::{LockState, TokenId, TokenMetadata};
 
 #[near]
@@ -24,7 +24,7 @@ impl Contract {
             .unwrap_or_else(|| UnorderedSet::new(tokens_per_owner_prefix(&owner_id)));
         let token = crate::types::Token {
             owner_id: owner_id.clone(),
-            approvals: LookupMap::new(StorageKey::ApprovalsById),
+            approvals: LookupMap::new(token_approvals_prefix(&token_id)),
             next_approval_id: 0,
         };
         self.tokens_by_id.insert(&token_id, &token);

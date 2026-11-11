@@ -48,6 +48,14 @@
         ],
         "return": "Vec<Approval>"
       },
+      "nft_approvals_for_account": {
+        "args": [
+          {"name": "account_id", "type": "AccountId"},
+          {"name": "from_index", "type": "Option<U128>"},
+          {"name": "limit", "type": "Option<u64>"}
+        ],
+        "return": "Vec<TokenApproval>"
+      },
       "nft_transfer": {
         "args": [
           {"name": "receiver_id", "type": "AccountId"},

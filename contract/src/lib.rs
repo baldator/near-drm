@@ -30,6 +30,8 @@ impl Contract {
             total_supply: 0,
             pending_transfers: LookupMap::new(StorageKey::PendingTransfers),
             next_pending_id: 0,
+            approvals_by_token: LookupMap::new(StorageKey::ApprovalsByToken),
+            approvals_per_account: LookupMap::new(StorageKey::ApprovalsPerAccount),
         };
         this.metadata.set(&metadata);
         this
