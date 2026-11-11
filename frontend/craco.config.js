@@ -44,12 +44,12 @@ module.exports = {
             'Access-Control-Allow-Origin': '*',
           },
         },
-        // Proxy the public IPFS gateway through the dev server in local
-        // development so browser fetch() calls are same-origin. w3s.link does
-        // not emit Access-Control-Allow-Origin, which otherwise triggers CORS
-        // blocks when downloading protected files from http://localhost:3000.
+        // Proxy the Pinata IPFS gateway through the dev server in local
+        // development so browser fetch() calls are same-origin. This avoids
+        // CORS blocks when downloading protected files from
+        // http://localhost:3000.
         '/ipfs': {
-          target: 'https://w3s.link',
+          target: 'https://gateway.pinata.cloud',
           changeOrigin: true,
           secure: false,
           headers: {

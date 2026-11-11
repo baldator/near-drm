@@ -30,7 +30,7 @@ This system lets creators sell encrypted digital files (PDFs, videos, design tem
 |------|---------|
 | NEAR CLI | Interact with contract from terminal (`npm install -g near-cli`) |
 | NEAR Wallet | Sign transactions and hold NFTs ([wallet.testnet.near.org](https://wallet.testnet.near.org)) |
-| IPFS client | Upload encrypted files ([w3s.link](https://w3s.link/)) |
+| IPFS client | Upload encrypted files (Pinata) |
 
 You need two testnet accounts (e.g., `alice.testnet`, `bob.testnet`) with testnet NEAR for gas.
 
@@ -70,7 +70,7 @@ Encrypt your file before uploading (GPG, age, AES-256, etc.). Store the decrypti
 
 ### Step 2: Upload to IPFS
 
-Upload the encrypted file to IPFS (via [w3s.link](https://w3s.link/), Pinata, or your own node). You get a Content ID (CID) like `QmXyZ123...`.
+Upload the encrypted file to IPFS via [Pinata](https://pinata.cloud) (or another pinning service / your own node). You get a Content ID (CID) like `QmXyZ123...`.
 
 ### Step 3: Mint the NFT
 
@@ -135,6 +135,6 @@ near call $CONTRACT nft_approve '{
 ### Step 3: Decrypt the File
 
 1. Get the encrypted file CID from token metadata (`/history/token-42` or `nft_token` view)
-2. Download from IPFS: `https://w3s.link/ipfs/QmEncryptedFileCID`
+2. Download from IPFS: `https://gateway.pinata.cloud/ipfs/QmEncryptedFileCID` (or your configured Pinata gateway)
 3. Use your decryption key (issued via Lit Protocol on `nft_approve`) to decrypt
 4. Key expires after TTL — request a new approval after expiration

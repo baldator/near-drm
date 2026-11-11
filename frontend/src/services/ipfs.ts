@@ -1,19 +1,35 @@
 // Resolves an IPFS media reference to a URL the browser can fetch.
 //
-// In local development, w3s.link does not emit Access-Control-Allow-Origin,
-// so browser fetch() from http://localhost:3000 would be blocked by CORS.
-// Route IPFS gateway requests through the dev-server proxy (/ipfs), which is
-// same-origin and forwards to https://w3s.link. On any other host (production,
-// etc.) we call the public gateway directly.
+// Content is pinned through Pinata, so downloads go through a Pinata gateway.
+// In local development the request is routed through the dev-server proxy
+// (/ipfs), which is same-origin and forwards to the gateway, avoiding CORS
+// blocks when downloading protected files from http://localhost:3000.
+
+const DEFAULT_PINATA_GATEWAY = 'https://gateway.pinata.cloud';
+
+function pinataGateway(): string {
+  const configured = process.env.REACT_APP_PINATA_GATEWAY?.trim();
+  if (!configured) {
+    return DEFAULT_PINATA_GATEWAY;
+  }
+  const withScheme = /^https?:\/\//.test(configured)
+    ? configured
+    : `https://${configured}`;
+  return withScheme.replace(/\/+$/, '');
+}
+
 export function resolveMediaUrl(media: string): string {
   if (!media) return '';
-  if (media.startsWith('ipfs://')) {
-    media = media.slice('ipfs://'.length);
+  let cid = media;
+  if (cid.startsWith('ipfs://')) {
+    cid = cid.slice('ipfs://'.length);
   }
-  if (media.startsWith('http://') || media.startsWith('https://')) {
-    return media;
+  if (cid.startsWith('http://') || cid.startsWith('https://')) {
+    return cid;
   }
   const isLocalhost =
     typeof window !== 'undefined' && window.location.hostname === 'localhost';
-  return isLocalhost ? `/ipfs/${media}` : `https://w3s.link/ipfs/${media}`;
+  return isLocalhost
+    ? `/ipfs/${cid}`
+    : `${pinataGateway()}/ipfs/${cid}`;
 }

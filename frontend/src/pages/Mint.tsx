@@ -9,10 +9,8 @@ import {
   CONTRACT_ID,
 } from '../services/contract';
 import { nearMPC } from '../services/near-mpc';
+import { pinFileToIPFS } from '../services/pinata';
 
-const IPFS_UPLOAD_URL =
-  process.env.REACT_APP_IPFS_UPLOAD_URL ||
-  'https://api.thegraph.com/ipfs/api/v0/add';
 const MAX_FILE_BYTES = 5 * 1024 * 1024;
 
 type SourceMode = 'file' | 'link';
@@ -88,41 +86,6 @@ function normalizeMediaLink(raw: string): string {
   return value;
 }
 
-async function uploadProtectedFile(
-  content: string,
-  fileName: string
-): Promise<string> {
-  const form = new FormData();
-  form.append(
-    'file',
-    new Blob([content], { type: 'text/plain;charset=utf-8' }),
-    fileName
-  );
-
-  const response = await fetch(IPFS_UPLOAD_URL, {
-    method: 'POST',
-    body: form,
-  });
-
-  if (!response.ok) {
-    throw new Error(`The storage service returned ${response.status}.`);
-  }
-
-  const raw = await response.text();
-  let parsed: any;
-  try {
-    parsed = JSON.parse(raw);
-  } catch {
-    throw new Error('The storage service returned an unexpected response.');
-  }
-
-  const cid = parsed.Hash || parsed.hash || parsed.cid;
-  if (!cid) {
-    throw new Error('The storage service did not return a file address.');
-  }
-  return cid;
-}
-
 function friendlyError(error: any): string {
   const raw = String(error?.message || error || 'Something went wrong.');
 
@@ -135,7 +98,7 @@ function friendlyError(error: any): string {
   if (/insufficient|balance|deposit/i.test(raw)) {
     return 'Your wallet does not have enough NEAR for the small network fee. Add a little testnet NEAR and try again.';
   }
-  if (/storage service|upload|ipfs|file/i.test(raw)) {
+  if (/pinata|storage service|upload|ipfs|file/i.test(raw)) {
     return `We could not save the protected file. ${raw}`;
   }
   return `Something went wrong: ${raw}`;
@@ -240,8 +203,8 @@ export function MintPage() {
     setPhase('Saving your protected copy…');
     const safeName =
       file.name.replace(/[^a-zA-Z0-9._-]/g, '-') || 'protected-file';
-    const cid = await uploadProtectedFile(
-      result.ciphertext,
+    const cid = await pinFileToIPFS(
+      new Blob([result.ciphertext], { type: 'text/plain;charset=utf-8' }),
       `${safeName}.protected.txt`
     );
 

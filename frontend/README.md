@@ -13,7 +13,7 @@ React/TypeScript frontend for the Decentralized Digital Rights Management (DRM) 
 ## Setup
 
 1. Install dependencies: `npm install`
-2. Create `.env` with `REACT_APP_CONTRACT_ID=vault.testnet`
+2. Create `.env` with `REACT_APP_CONTRACT_ID=vault.testnet` and the Pinata variables below
 3. Start dev server: `npm start`
 4. Deploy contract to testnet first, then update `REACT_APP_CONTRACT_ID`
 
@@ -27,7 +27,12 @@ Uses `near-api-js` to call:
 
 - Network: NEAR Testnet
 - Contract ID: `vault.testnet` (update in `.env`)
-- Optional: `REACT_APP_IPFS_UPLOAD_URL` overrides the default IPFS upload endpoint used by the Mint page (`https://api.thegraph.com/ipfs/api/v0/add`)
+- IPFS uploads use [Pinata](https://pinata.cloud):
+  - `REACT_APP_PINATA_JWT` — Pinata JWT scoped to `pinFileToIPFS` (required for file uploads)
+  - `REACT_APP_PINATA_GATEWAY` — optional dedicated gateway (defaults to `https://gateway.pinata.cloud`)
+  - `REACT_APP_PINATA_UPLOAD_URL` — optional server-side upload proxy; recommended for production because `REACT_APP_*` values are bundled into the client
+
+> Because Create React App exposes every `REACT_APP_*` variable in the browser bundle, use a scoped Pinata key restricted to your domain, or proxy uploads through a backend.
 
 ## Mint Flow
 
