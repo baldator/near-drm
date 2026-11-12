@@ -3,7 +3,11 @@ import { useParams } from 'react-router-dom';
 import { AccessList } from '../components/AccessList';
 import { contract, getAccountId, isSignedIn } from '../services/contract';
 import type { NftApproval } from '../services/contract';
-import { nearMPC } from '../services/near-mpc';
+import {
+  ensureRegisteredPublicKey,
+  grantContentKey,
+  openProtectedFile,
+} from '../services/near-mpc';
 import { resolveMediaUrl } from '../services/ipfs';
 
 interface StatusMessage {
@@ -18,6 +22,48 @@ const TTL_OPTIONS = [
   { value: '720', label: '30 days', hint: 'Access expires in 30 days' },
 ];
 
+interface ProtectedFileInfo {
+  fileName: string;
+  fileType: string;
+  encrypted: boolean;
+  legacy: boolean;
+}
+
+// `extra` is stored on the contract as a JSON string (see Mint.tsx), so it has
+// to be parsed before we can read the original file name, MIME type, and the
+// encryption metadata.
+function readProtectedFileInfo(token: any): ProtectedFileInfo {
+  let extra: any = token?.extra;
+  if (typeof extra === 'string') {
+    try {
+      extra = JSON.parse(extra);
+    } catch {
+      extra = null;
+    }
+  }
+
+  const media = typeof token?.media === 'string' ? token.media : '';
+  const legacy =
+    extra?.content_encoding === 'base64' ||
+    Boolean(extra?.mpc_key_id) ||
+    media.startsWith('mpc-encrypted:');
+
+  return {
+    fileName: extra?.file_name || token?.title || 'protected-file',
+    fileType: extra?.file_type || 'application/octet-stream',
+    encrypted: Boolean(extra?.encryption),
+    legacy,
+  };
+}
+
+function canPreviewAsText(fileType: string): boolean {
+  return (
+    fileType.startsWith('text/') ||
+    fileType === 'application/json' ||
+    fileType === 'application/xml'
+  );
+}
+
 export function GatedPage() {
   const { tokenId } = useParams();
   const [token, setToken] = useState<any>(null);
@@ -27,7 +73,7 @@ export function GatedPage() {
   const [grantAccount, setGrantAccount] = useState('');
   const [grantTtl, setGrantTtl] = useState('24');
   const [decrypting, setDecrypting] = useState(false);
-  const [decryptedContent, setDecryptedContent] = useState<string | null>(null);
+  const [decryptedPreview, setDecryptedPreview] = useState<string | null>(null);
   const [downloadUrl, setDownloadUrl] = useState<string | null>(null);
   const [downloadName, setDownloadName] = useState('protected-file');
   const [decryptError, setDecryptError] = useState<string | null>(null);
@@ -35,6 +81,8 @@ export function GatedPage() {
   const [approvalsLoading, setApprovalsLoading] = useState(false);
   const [approvalsError, setApprovalsError] = useState<string | null>(null);
   const [revokingAccount, setRevokingAccount] = useState<string | null>(null);
+  const [encryptionKey, setEncryptionKey] = useState<string | null>(null);
+  const [registeringKey, setRegisteringKey] = useState(false);
 
   useEffect(() => {
     if (!tokenId) return;
@@ -55,6 +103,15 @@ export function GatedPage() {
             approved_account_id: getAccountId()!,
           });
           setIsApproved(approved);
+
+          try {
+            const key = await contract.get_encryption_key({
+              account_id: getAccountId()!,
+            });
+            setEncryptionKey(key || null);
+          } catch {
+            // Older deployments may not have the encryption-key view yet.
+          }
         }
       } catch (error: any) {
         setStatus({ tone: 'error', text: `Couldn't load this file: ${error.message || error.toString()}` });
@@ -88,6 +145,33 @@ export function GatedPage() {
     refreshApprovals();
   }, [refreshApprovals]);
 
+  const handleRegisterKey = async () => {
+    if (!isSignedIn()) {
+      setStatus({ tone: 'error', text: 'Please connect your wallet first.' });
+      return;
+    }
+    setRegisteringKey(true);
+    setStatus({
+      tone: 'info',
+      text: 'Creating your confidential key with NEAR MPC. Please approve the wallet request…',
+    });
+    try {
+      const publicKey = await ensureRegisteredPublicKey(getAccountId()!);
+      setEncryptionKey(publicKey);
+      setStatus({
+        tone: 'success',
+        text: 'Your encryption key is registered. The owner can now share protected files with you.',
+      });
+    } catch (error: any) {
+      setStatus({
+        tone: 'error',
+        text: `Couldn't create your encryption key: ${error.message || error.toString()}`,
+      });
+    } finally {
+      setRegisteringKey(false);
+    }
+  };
+
   const handleGrantAccess = async (targetAccount: string, ttlHours: string) => {
     if (!isSignedIn()) {
       setStatus({ tone: 'error', text: 'Please connect your wallet first.' });
@@ -99,8 +183,27 @@ export function GatedPage() {
     }
     setStatus({ tone: 'info', text: `Granting access to ${targetAccount}…` });
     try {
-      // The contract stores (and compares) `expires_at` as a NEAR block
-      // timestamp in nanoseconds, so convert the wall-clock deadline.
+      const recipientKey = await contract.get_encryption_key({
+        account_id: targetAccount,
+      });
+      if (!recipientKey) {
+        throw new Error(
+          `${targetAccount} has not set up an encryption key yet. Ask them to open this page and click "Create my encryption key" first.`
+        );
+      }
+
+      setStatus({
+        tone: 'info',
+        text: `Wrapping the content key for ${targetAccount} with NEAR MPC…`,
+      });
+      const keyEnvelope = await grantContentKey(
+        tokenId!,
+        getAccountId()!,
+        targetAccount
+      );
+
+      // The contract stores the (expires_at) deadline and the wrapped key in
+      // one transaction, so access and key delivery cannot diverge.
       const deadlineMs =
         Date.now() + parseInt(ttlHours || '24') * 60 * 60 * 1000;
       const expiresAt = deadlineMs * 1_000_000;
@@ -111,8 +214,10 @@ export function GatedPage() {
           expires_at: expiresAt,
           ttl_hours: parseInt(ttlHours || '24'),
           granted_by: getAccountId()!,
+          key_envelope: keyEnvelope,
         }),
       });
+
       setStatus({ tone: 'success', text: `Access granted to ${targetAccount} for ${ttlHours} hours.` });
       setGrantAccount('');
       setGrantTtl('24');
@@ -138,7 +243,7 @@ export function GatedPage() {
         token_id: tokenId!,
         account_id: account,
       });
-      setStatus({ tone: 'success', text: `Access revoked for ${account}.` });
+      setStatus({ tone: 'success', text: `Access revoked for ${account}. Their wrapped key was deleted.` });
       await refreshApprovals();
       if (isSignedIn()) {
         const approved = await contract.nft_is_approved({
@@ -162,42 +267,62 @@ export function GatedPage() {
 
     setDecrypting(true);
     setDecryptError(null);
-    setDecryptedContent(null);
+    setDecryptedPreview(null);
     if (downloadUrl) {
       URL.revokeObjectURL(downloadUrl);
       setDownloadUrl(null);
     }
 
     try {
-      const isApprovedCheck = await contract.nft_is_approved({
-        token_id: tokenId!,
-        approved_account_id: getAccountId()!,
-      });
+      const info = readProtectedFileInfo(token);
+      if (info.legacy) {
+        throw new Error(
+          'This file was created with the old demo encryption format and cannot be opened. Re-create it from the mint page to use AES-256-GCM.'
+        );
+      }
+      if (!info.encrypted) {
+        throw new Error(
+          'This token points to an external link rather than an encrypted file. Open the link directly instead.'
+        );
+      }
+
+      const isApprovedCheck =
+        isOwner ||
+        (await contract.nft_is_approved({
+          token_id: tokenId!,
+          approved_account_id: getAccountId()!,
+        }));
 
       if (!isApprovedCheck) {
         throw new Error("You don't have permission to open this file.");
       }
 
+      setStatus({
+        tone: 'info',
+        text: 'Fetching your wrapped key from NEAR MPC…',
+      });
+
       const response = await fetch(resolveMediaUrl(token.media));
       if (!response.ok) {
         throw new Error(`Failed to fetch the protected file (${response.status}).`);
       }
+      const ciphertext = new Uint8Array(await response.arrayBuffer());
 
-      const ciphertext = await response.text();
+      const plaintext = await openProtectedFile(
+        tokenId!,
+        getAccountId()!,
+        ciphertext
+      );
 
-      const decrypted = await nearMPC.decryptWithMPC({
-        ciphertext,
-        keyId: token.decryption_key_cid || `mpc-${tokenId}-${getAccountId()!}-decryption`,
-        accountId: getAccountId()!,
-        tokenId: tokenId!,
-        mpcProof: `mpc-proof-${tokenId}`,
-      });
-
-      const blob = new Blob([decrypted], { type: 'text/plain' });
+      const blob = new Blob([plaintext as BlobPart], { type: info.fileType });
       const url = URL.createObjectURL(blob);
       setDownloadUrl(url);
-      setDownloadName(token.extra?.file_name || 'protected-file');
-      setDecryptedContent(decrypted);
+      setDownloadName(info.fileName);
+      setDecryptedPreview(
+        canPreviewAsText(info.fileType)
+          ? new TextDecoder().decode(plaintext)
+          : null
+      );
       setStatus({ tone: 'success', text: 'The file is ready to download.' });
     } catch (error: any) {
       setDecryptError(error.message || error.toString());
@@ -239,6 +364,40 @@ export function GatedPage() {
           <strong>Connect your wallet</strong>
           <p>Sign in to open this file or manage access.</p>
         </div>
+      )}
+
+      {isSignedIn() && (
+        <section className="gated-step">
+          <div className="gated-step-heading">
+            <div>
+              <h2>Your encryption key</h2>
+              <p>
+                Your key is derived confidentially by NEAR MPC and never stored
+                on-chain. You need it to open files shared with you.
+              </p>
+            </div>
+          </div>
+          {encryptionKey ? (
+            <div className="gated-status gated-status-success">
+              <span>✓</span>
+              <p>Your encryption key is registered and ready.</p>
+            </div>
+          ) : (
+            <>
+              <p className="gated-help">
+                Create your key once. You will approve one wallet transaction
+                and wait a few seconds for the MPC network.
+              </p>
+              <button
+                className="btn btn-primary"
+                onClick={handleRegisterKey}
+                disabled={registeringKey}
+              >
+                {registeringKey ? 'Creating your key…' : 'Create my encryption key'}
+              </button>
+            </>
+          )}
+        </section>
       )}
 
       <div className="gated-access-badge">
@@ -285,6 +444,7 @@ export function GatedPage() {
             />
             <p className="gated-help">
               This is the NEAR account ID of the person you want to share with.
+              They must create their encryption key first.
             </p>
           </div>
           <div className="gated-field">
@@ -371,32 +531,27 @@ export function GatedPage() {
               <p>{decryptError}</p>
             </div>
           )}
-          {decryptedContent ? (
+          {downloadUrl ? (
             <>
               <div className="gated-status gated-status-success">
                 <span>✓</span>
                 <p>The file is ready.</p>
               </div>
-              {downloadUrl ? (
-                <a
-                  href={downloadUrl}
-                  download={downloadName}
-                  className="btn btn-primary"
-                >
-                  Download {downloadName}
-                </a>
-              ) : (
-                <div className="gated-decrypted-preview">
-                  {decryptedContent}
-                </div>
+              <a
+                href={downloadUrl}
+                download={downloadName}
+                className="btn btn-primary"
+              >
+                Download {downloadName}
+              </a>
+              {decryptedPreview && (
+                <div className="gated-decrypted-preview">{decryptedPreview}</div>
               )}
               <button
                 onClick={() => {
-                  setDecryptedContent(null);
-                  if (downloadUrl) {
-                    URL.revokeObjectURL(downloadUrl);
-                    setDownloadUrl(null);
-                  }
+                  setDecryptedPreview(null);
+                  URL.revokeObjectURL(downloadUrl);
+                  setDownloadUrl(null);
                 }}
                 className="btn btn-outline"
               >
@@ -417,4 +572,3 @@ export function GatedPage() {
     </div>
   );
 }
-
