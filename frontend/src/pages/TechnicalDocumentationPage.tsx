@@ -57,7 +57,7 @@ const STANDARDS = [
   {
     icon: '📣',
     title: 'NEP-171 events',
-    text: 'Standard events such as nft_approve and nft_revoke let off-chain key services react in real time.',
+    text: 'Standard events such as nft_approve and nft_revoke let indexers and UIs follow access changes; enforcement itself is on-chain.',
   },
 ];
 
@@ -73,9 +73,9 @@ const METADATA_ROWS = [
   ['whitelist_root', 'string | null', 'Optional Merkle root for allow-listed wallets.'],
   ['sub_account_id', 'AccountId', 'token-{id}.vault.near revenue account.'],
   [
-    'decryption_key_cid',
-    'string | null',
-    'Reference to the key material managed by the key service.',
+    'extra',
+    'string (JSON)',
+    'Original file name/MIME/size plus the AES-GCM and CKD parameters.',
   ],
   [
     'royalty_percentage',
@@ -86,28 +86,28 @@ const METADATA_ROWS = [
 
 const LIFECYCLE = [
   {
+    title: 'Register',
+    text: 'Each account derives an X25519 key through NEAR MPC CKD and registers only its public key with set_encryption_key.',
+  },
+  {
     title: 'Mint',
-    text: 'The creator mints an NFT whose metadata records the encrypted CID, access rules, royalty, and vault sub-account.',
+    text: 'The creator encrypts with AES-256-GCM, uploads ciphertext, and mints with owner_envelope so the owner can open it immediately.',
   },
   {
     title: 'Grant',
-    text: 'The owner calls nft_approve for a buyer. The optional msg carries expires_at (nanoseconds) and ttl_hours.',
+    text: 'The owner wraps the content key to the recipient and calls nft_approve. The msg carries expires_at, ttl_hours, and key_envelope.',
   },
   {
     title: 'Verify',
-    text: 'nft_is_approved checks the approval and its expiry on-chain. The key service consumes the same state before releasing a key.',
+    text: 'nft_is_approved checks the approval and its expiry on-chain. get_key_envelope refuses to return the recipient key otherwise.',
   },
   {
     title: 'Decrypt',
-    text: 'The buyer fetches the protected file, presents the grant, and decrypts in memory inside the browser.',
-  },
-  {
-    title: 'Expire',
-    text: 'When the window closes, the approval stops validating. No password rotation or file takedown is required.',
+    text: 'The recipient fetches the ciphertext, recovers their CKD secret, unwraps the content key, and decrypts in memory.',
   },
   {
     title: 'Revoke',
-    text: 'The owner can call nft_revoke at any time. The access ends immediately and an nft_revoke event is emitted.',
+    text: 'nft_revoke, expiry cleanup, or a transfer deletes the recipient envelope, so the ciphertext alone stops being useful.',
   },
 ];
 
@@ -125,14 +125,14 @@ const PURCHASE_FLOW = [
     text: 'nft_resolve_transfer commits the new owner on success, or rolls the token and funds back to the sender on failure.',
   },
   {
-    title: 'Issue access',
-    text: 'A successful transfer emits nft_transfer and clears stale approvals. The new owner can grant or receive access next.',
+    title: 'Carry the key',
+    text: 'An envelope the sender pre-wrapped for the receiver survives a successful transfer; on rollback it is deleted with the receiver entry.',
   },
 ];
 
 const EVENT_ROWS = [
-  ['nft_approve', 'Access granted or renewed', 'Issue a short-lived key for the approved wallet.'],
-  ['nft_revoke', 'Access removed', 'Invalidate the key and stop future decryptions.'],
+  ['nft_approve', 'Access granted or renewed', 'Record the approval and its wrapped key envelope.'],
+  ['nft_revoke', 'Access removed', 'Delete the approval and the recipient envelope.'],
   ['nft_metadata_update', 'Metadata changed', 'Refresh cached metadata and access UI.'],
   ['nft_transfer', 'Ownership changed', 'Re-bind treasury withdrawal rights to the new owner.'],
 ];
@@ -166,30 +166,60 @@ const SECURITY = [
   {
     icon: '🕵️',
     title: 'No plaintext on-chain',
-    text: 'Only ciphertext CIDs, access rules, and hashes are stored. Decryption happens in the client runtime.',
+    text: 'Only ciphertext CIDs, wrapped envelopes, and access rules are stored. Decryption happens in the client runtime.',
+  },
+  {
+    icon: '🗝️',
+    title: 'Confidential derived keys',
+    text: 'X25519 secrets come from NEAR MPC CKD and are never written on-chain or to IPFS. Only public keys are registered.',
+  },
+  {
+    icon: '🚫',
+    title: 'Destructive revocation',
+    text: 'Revoking, expiry cleanup, or transferring deletes the recipient envelope, so a cached ciphertext cannot be reopened.',
   },
 ];
 
 const API_ROWS = [
   [
     'nft_mint',
-    'token_id, owner_id, metadata',
-    'Mints a token, stores metadata, and registers its vault sub-account.',
+    'token_id, owner_id, metadata, owner_envelope?',
+    'Mints a token, registers its vault sub-account, and optionally stores the owner\'s wrapped content key.',
   ],
   [
     'nft_approve',
     'token_id, account_id, msg',
-    'Owner grants time-boxed access. msg may include expires_at and ttl_hours.',
+    'Owner grants time-boxed access. msg may include expires_at, ttl_hours, and key_envelope.',
   ],
   [
     'nft_revoke',
     'token_id, account_id',
-    'Owner removes an approval immediately and emits nft_revoke.',
+    'Owner removes an approval immediately, deletes its envelope, and emits nft_revoke.',
   ],
   [
     'nft_is_approved',
     'token_id, approved_account_id',
-    'View helper used by the UI and key service; respects expiry.',
+    'View helper used by the UI; respects expiry.',
+  ],
+  [
+    'set_encryption_key',
+    'x25519_public_key',
+    'Registers or rotates the caller\'s base64 X25519 public key.',
+  ],
+  [
+    'get_encryption_key',
+    'account_id',
+    'Returns an account\'s registered X25519 public key.',
+  ],
+  [
+    'get_key_envelope',
+    'token_id, account_id',
+    'Returns the wrapped content key only to the owner or an active approver.',
+  ],
+  [
+    'set_key_envelope',
+    'token_id, account_id, envelope',
+    'Owner-only recovery path to re-send or rotate a recipient envelope.',
   ],
   [
     'nft_transfer',
@@ -254,15 +284,15 @@ export function TechnicalDocumentationPage() {
                 <h2>System overview</h2>
                 <p>
                   Four moving parts: an NFT contract, an encrypted payload, a
-                  treasury per token, and a threshold key service.
+                  treasury per token, and NEAR MPC key derivation.
                 </p>
               </div>
             </div>
 
             <p className="doc-lead">
               Each token is an NFT with extra metadata. The contract owns the
-              ownership and access state, storage holds only ciphertext, and the
-              key service turns an on-chain approval into a decryption
+              ownership and access state, storage holds only ciphertext, and
+              NEAR MPC CKD turns an on-chain approval into a decryption
               capability that expires automatically.
             </p>
 
@@ -340,9 +370,9 @@ export function TechnicalDocumentationPage() {
                 <div>
                   <strong>Derive and decrypt</strong>
                   <p>
-                    After verifying the approval, the key service releases a
-                    derivation proof. The buyer fetches the ciphertext and
-                    decrypts it in memory.
+                    After verifying the approval, the buyer reads their wrapped
+                    envelope from the contract, derives their CKD secret, and
+                    decrypts the ciphertext in memory.
                   </p>
                 </div>
               </li>
@@ -486,10 +516,10 @@ export function TechnicalDocumentationPage() {
             <div className="doc-section-heading">
               <span className="doc-section-number">07</span>
               <div>
-                <h2>Events for off-chain key management</h2>
+                <h2>Events and access observability</h2>
                 <p>
-                  The key service consumes standard logs from a NEAR indexer;
-                  the chain remains the source of truth.
+                  Standard logs let indexers and UIs follow changes; the contract
+                  itself remains the source of truth.
                 </p>
               </div>
             </div>
@@ -593,15 +623,20 @@ export function TechnicalDocumentationPage() {
               </li>
               <li>
                 <code className="doc-code">contract/src/approval.rs</code> —
-                approvals, expiry checks, revocation, and access events.
+                approvals, expiry checks, revocation, and envelope delivery.
+              </li>
+              <li>
+                <code className="doc-code">contract/src/encryption.rs</code> —
+                X25519 key registry and wrapped content-key envelopes.
               </li>
               <li>
                 <code className="doc-code">contract/src/transfer.rs</code> —
-                transfer locks, receiver hooks, and rollback resolution.
+                transfer locks, receiver hooks, envelope preservation, and
+                rollback resolution.
               </li>
               <li>
                 <code className="doc-code">frontend/src/services/near-mpc.ts</code>{' '}
-                — MPC key-derivation and encryption integration point.
+                — NEAR MPC CKD, HKDF, X25519 wrapping, and AES-256-GCM.
               </li>
               <li>
                 <code className="doc-code">frontend/src/services/contract.ts</code>{' '}
@@ -616,10 +651,10 @@ export function TechnicalDocumentationPage() {
               <div>
                 <strong>Demo scope</strong>
                 <p>
-                  The deployed contract implements the NEP token, approval,
-                  transfer, and vault metadata flows. The MPC client is a clearly
-                  marked integration stub, so the UI can be exercised end-to-end
-                  before the production key service is connected.
+                  The contract implements the NEP token, approval, transfer,
+                  vault metadata, and on-chain envelope flows. The client derives
+                  X25519 keys through NEAR MPC CKD and encrypts with AES-256-GCM;
+                  the gated page enforces ownership/approval before decrypting.
                 </p>
               </div>
             </div>

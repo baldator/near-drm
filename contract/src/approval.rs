@@ -38,11 +38,20 @@ impl Contract {
         );
         let approval_id = self.next_approval_id;
         self.next_approval_id += 1;
-        let expires_at = msg
+        // `msg` doubles as the grant payload: it can carry both the deadline
+        // and the AES content key wrapped to the recipient's X25519 key.
+        let msg_value = msg
             .as_ref()
-            .and_then(|m| serde_json::from_str::<serde_json::Value>(m).ok())
+            .and_then(|m| serde_json::from_str::<serde_json::Value>(m).ok());
+        let expires_at = msg_value
+            .as_ref()
             .and_then(|v| v.get("expires_at").and_then(|v| v.as_u64()))
             .map(|ts| ts as Timestamp);
+        let key_envelope = msg_value
+            .as_ref()
+            .and_then(|v| v.get("key_envelope"))
+            .and_then(|v| v.as_str())
+            .map(|value| value.to_owned());
         let approval = Approval {
             account_id: account_id.clone(),
             approval_id,
@@ -59,6 +68,13 @@ impl Contract {
         token_approvals.insert(&account_id, &approval);
         self.approvals_by_id.insert(&token_id, &token_approvals);
         self.internal_index_approval(&token_id, &account_id);
+        if let Some(envelope) = key_envelope {
+            assert!(
+                self.encryption_keys.get(&account_id).is_some(),
+                "Recipient has not registered an encryption key yet"
+            );
+            self.internal_set_key_envelope(&token_id, &account_id, &envelope);
+        }
         let expires_at_str = expires_at
             .map(|t| t.to_string())
             .unwrap_or_else(|| "none".to_string());
@@ -95,6 +111,9 @@ impl Contract {
         token_approvals.remove(&account_id);
         self.approvals_by_id.insert(&token_id, &token_approvals);
         self.internal_unindex_approval(&token_id, &account_id);
+        // Revocation must destroy the wrapped content key, not just the
+        // approval flag, so a later request cannot read the envelope.
+        self.internal_remove_key_envelope(&token_id, &account_id);
         let owner_id_for_event = self
             .owner_of
             .get(&token_id)
@@ -107,8 +126,17 @@ impl Contract {
     }
 
     pub fn nft_is_approved(&self, token_id: TokenId, approved_account_id: AccountId) -> bool {
-        match self.tokens_by_id.get(&token_id) {
-            Some(token) => match token.approvals.get(&approved_account_id) {
+        self.internal_is_approved(&token_id, &approved_account_id)
+    }
+
+    /// Returns whether `account_id` currently holds an unexpired approval.
+    pub(crate) fn internal_is_approved(
+        &self,
+        token_id: &TokenId,
+        account_id: &AccountId,
+    ) -> bool {
+        match self.tokens_by_id.get(token_id) {
+            Some(token) => match token.approvals.get(account_id) {
                 Some(approval) => is_active_approval(&approval, env::block_timestamp()),
                 None => false,
             },
@@ -207,6 +235,7 @@ impl Contract {
         for account_id in approvers {
             token.approvals.remove(&account_id);
             self.internal_unindex_approval(token_id, &account_id);
+            self.internal_remove_key_envelope(token_id, &account_id);
         }
         self.approvals_by_id.remove(token_id);
         token.next_approval_id = 0;

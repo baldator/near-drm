@@ -57,3 +57,16 @@ When binding an NEP-171 NFT to an on-chain sub-account (e.g., `token-1.vault.nea
 ---
 
 Please review the threat model above. Once you confirm with your **OK**, I will proceed with the architecture documentation and full code implementation according to the requirements.
+
+---
+
+### Content Encryption & Confidential Key Delivery
+
+1. **Public ciphertext, confidential key:** The IPFS object is AES-256-GCM ciphertext. An attacker who downloads it learns nothing without the per-token content key.
+2. **Unapproved accounts cannot obtain keys:** `get_key_envelope` returns an envelope only when the queried account owns the token or has an unexpired NEP-178 approval. Anyone else receives `None`.
+3. **Envelope theft is not useful:** An envelope is encrypted to the recipient's X25519 public key, whose secret is derived through NEAR MPC CKD and never stored on-chain or in IPFS. Copying an envelope does not let a third party open it.
+4. **Revocation is destructive:** `nft_revoke`, approval clearing, and transfers delete the recipient's envelope. An expired approval also fails `internal_is_approved`, so its envelope is unreachable even before physical deletion.
+5. **Token binding:** AES-GCM uses `AAD = "{contract}:{token_id}:v1"` for both content and envelope encryption. A ciphertext or envelope cannot be replayed under a different token ID.
+6. **Owner-only delivery:** `set_key_envelope` is restricted to the token owner and to recipients that are the owner or actively approved. It also requires the recipient to have registered an X25519 public key.
+7. **Minting is atomic:** `nft_mint` accepts `owner_envelope`, so a token cannot end up owned but permanently undecryptable because a second transaction failed.
+8. **CKD verification:** The client checks `e(S, G2) == e(H(mpc_pk || app_id), mpc_pk)` before using a derived key, rejecting a malicious or misconfigured MPC response.

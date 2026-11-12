@@ -6,9 +6,13 @@ import {
   getModal,
   initWalletSelector,
   isSignedIn,
-  CONTRACT_ID,
 } from '../services/contract';
-import { nearMPC } from '../services/near-mpc';
+import {
+  CKD_DERIVATION_PATH,
+  CKD_DOMAIN_ID,
+  MPC_CONTRACT_ID,
+  encryptAssetForMint,
+} from '../services/near-mpc';
 import { pinFileToIPFS } from '../services/pinata';
 
 const MAX_FILE_BYTES = 5 * 1024 * 1024;
@@ -23,8 +27,8 @@ interface StatusMessage {
 
 interface PreparedAsset {
   media: string;
-  keyId: string | null;
   extra: string | null;
+  ownerEnvelope: string | null;
 }
 
 const DURATION_OPTIONS = [
@@ -50,19 +54,18 @@ function humanizeFileName(name: string): string {
     .replace(/\b\w/g, (character) => character.toUpperCase());
 }
 
-function fileToBase64(file: File): Promise<string> {
+function fileToBytes(file: File): Promise<Uint8Array> {
   return new Promise((resolve, reject) => {
     const reader = new FileReader();
     reader.onload = () => {
-      if (typeof reader.result !== 'string') {
+      if (!(reader.result instanceof ArrayBuffer)) {
         reject(new Error('We could not read that file.'));
         return;
       }
-      const comma = reader.result.indexOf(',');
-      resolve(comma >= 0 ? reader.result.slice(comma + 1) : reader.result);
+      resolve(new Uint8Array(reader.result));
     };
     reader.onerror = () => reject(new Error('We could not read that file.'));
-    reader.readAsDataURL(file);
+    reader.readAsArrayBuffer(file);
   });
 }
 
@@ -173,8 +176,8 @@ export function MintPage() {
     if (sourceMode === 'link') {
       return {
         media: normalizeMediaLink(link),
-        keyId: null,
         extra: null,
+        ownerEnvelope: null,
       };
     }
 
@@ -183,44 +186,45 @@ export function MintPage() {
     }
 
     setPhase('Reading your file…');
-    const base64 = await fileToBase64(file);
+    const bytes = await fileToBytes(file);
 
-    setPhase('Protecting your file…');
-    const derivation = await nearMPC.requestKeyDerivation({
-      contractId: CONTRACT_ID,
-      tokenId: newTokenId,
-      accountId: getAccountId()!,
-      purpose: 'encryption',
-      nonce: Math.random().toString(36).slice(2),
-    });
-
-    const result = await nearMPC.encryptWithMPC({
-      content: base64,
-      keyId: derivation.keyId,
-      mpcProof: derivation.derivationProof,
-    });
+    setPhase('Encrypting with AES-256-GCM…');
+    const encrypted = await encryptAssetForMint(
+      bytes,
+      newTokenId,
+      getAccountId()!
+    );
 
     setPhase('Saving your protected copy…');
     const safeName =
       file.name.replace(/[^a-zA-Z0-9._-]/g, '-') || 'protected-file';
     const cid = await pinFileToIPFS(
-      new Blob([result.ciphertext], { type: 'text/plain;charset=utf-8' }),
-      `${safeName}.protected.txt`
+      new Blob([encrypted.ciphertext as BlobPart], {
+        type: 'application/octet-stream',
+      }),
+      `${safeName}.protected`
     );
 
     const extra = JSON.stringify({
       file_name: file.name,
       file_type: file.type || 'application/octet-stream',
       file_size: file.size,
-      content_encoding: 'base64',
-      mpc_key_id: result.keyId,
+      encryption: {
+        scheme: 'AES-256-GCM',
+        version: 1,
+        aad: encrypted.aad,
+        key_wrapping: 'X25519-HKDF-SHA256',
+        mpc_contract: MPC_CONTRACT_ID,
+        ckd_domain_id: CKD_DOMAIN_ID,
+        derivation_path: CKD_DERIVATION_PATH,
+      },
       protected_at: new Date().toISOString(),
     });
 
     return {
       media: `ipfs://${cid}`,
-      keyId: result.keyId,
       extra,
+      ownerEnvelope: encrypted.ownerEnvelope,
     };
   };
 
@@ -301,7 +305,6 @@ export function MintPage() {
         },
         whitelist_root: whitelistRoot.trim() || null,
         sub_account_id: `token-${newTokenId}.vault.near`,
-        decryption_key_cid: prepared.keyId,
         royalty_percentage: Math.round(royalty * 100),
         extra: prepared.extra,
       };
@@ -310,6 +313,7 @@ export function MintPage() {
         token_id: newTokenId,
         owner_id: getAccountId()!,
         metadata,
+        owner_envelope: prepared.ownerEnvelope,
       });
 
       setTokenId(newTokenId);
@@ -715,8 +719,9 @@ export function MintPage() {
               ) : (
                 'Connect your wallet to continue.'
               )}{' '}
-              You will approve one transaction in your wallet. A small network
-              fee applies.
+              You will approve a short series of wallet requests: creating your
+              encryption key (first time only) and minting the NFT. A small
+              network fee applies.
             </p>
           </div>
           <button

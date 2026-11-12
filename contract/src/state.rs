@@ -20,6 +20,8 @@ pub enum StorageKey {
     /// New variants must stay at the end so existing prefixes remain stable.
     ApprovalsByToken,
     ApprovalsPerAccount,
+    EncryptionKeys,
+    TokenKeyEnvelopes,
 }
 
 /// The contract's persistent on-chain state.
@@ -43,6 +45,12 @@ pub struct Contract {
     pub approvals_by_token: LookupMap<TokenId, UnorderedSet<AccountId>>,
     /// Tokens on which a given account currently holds an approval.
     pub approvals_per_account: LookupMap<AccountId, UnorderedSet<TokenId>>,
+    /// X25519 public keys registered by accounts. The matching secret is
+    /// derived through NEAR MPC CKD and never stored on-chain.
+    pub encryption_keys: LookupMap<AccountId, String>,
+    /// Per-token, per-account wrapped content keys. Only the account that owns
+    /// or is currently approved for the token can read its envelope.
+    pub token_key_envelopes: LookupMap<TokenId, LookupMap<AccountId, String>>,
 }
 
 /// Builds a storage prefix for a given account's owned-token set.
@@ -73,4 +81,9 @@ pub fn approvals_by_token_prefix(token_id: &TokenId) -> Vec<u8> {
 /// Builds a storage prefix for an account's set of approved tokens.
 pub fn approvals_per_account_prefix(account_id: &AccountId) -> Vec<u8> {
     prefixed(b"approvals_per_account", account_id.as_bytes())
+}
+
+/// Builds a storage prefix for a token's account -> wrapped-key envelope map.
+pub fn token_key_envelopes_prefix(token_id: &TokenId) -> Vec<u8> {
+    prefixed(b"token_key_envelopes", token_id.as_bytes())
 }

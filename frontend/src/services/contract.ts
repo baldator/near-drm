@@ -11,7 +11,6 @@ import {
   onAccountChange,
   getModal,
 } from './wallet-selector';
-import { nearMPC } from './near-mpc';
 
 const CONTRACT_ID = process.env.REACT_APP_CONTRACT_ID || 'neardrm.testnet';
 const NETWORK_ID = 'testnet';
@@ -59,7 +58,12 @@ export interface DrmContract {
     from_index?: string | null;
     limit?: number | null;
   }) => Promise<string[]>;
-  nft_mint: (args: { token_id: string; owner_id: string; metadata: any }) => Promise<void>;
+  nft_mint: (args: {
+    token_id: string;
+    owner_id: string;
+    metadata: any;
+    owner_envelope?: string | null;
+  }) => Promise<void>;
   nft_is_approved: (args: {
     token_id: string;
     approved_account_id: string;
@@ -68,6 +72,17 @@ export interface DrmContract {
   nft_revoke: (args: { token_id: string; account_id: string }) => Promise<void>;
   get_sub_account: (args: { token_id: string }) => Promise<string>;
   get_lock_state: (args: { token_id: string }) => Promise<string>;
+  get_encryption_key: (args: { account_id: string }) => Promise<string | null>;
+  set_encryption_key: (args: { x25519_public_key: string }) => Promise<void>;
+  get_key_envelope: (args: {
+    token_id: string;
+    account_id: string;
+  }) => Promise<string | null>;
+  set_key_envelope: (args: {
+    token_id: string;
+    account_id: string;
+    envelope: string;
+  }) => Promise<void>;
 }
 
 export let near: any;
@@ -89,13 +104,6 @@ export async function initNear() {
         ...nearConfigBase,
         nodeUrl: getNodeUrl(),
       });
-
-      // Initialize NEAR MPC (CKD) for DRM encryption/decryption
-      try {
-        await nearMPC.init();
-      } catch (error) {
-        console.warn('NEAR MPC initialization failed:', error);
-      }
     })().catch((error) => {
       // Allow a later call to retry if initialization failed.
       nearInitPromise = null;
@@ -200,6 +208,148 @@ async function functionCall(methodName: string, args: any, deposit: bigint = Big
   return outcome;
 }
 
+/**
+ * Send a function call to any contract through the connected wallet.
+ *
+ * Used for NEAR MPC CKD, where the caller must be the user's own account
+ * (the derived key is bound to the predecessor account ID).
+ */
+export async function callExternalContract(
+  receiverId: string,
+  methodName: string,
+  args: any,
+  deposit: bigint = BigInt(0),
+  gas: bigint = BigInt('300000000000000')
+) {
+  const wallet = getActiveWallet();
+  const signerId = getAccountId();
+
+  if (!wallet || !signerId) {
+    throw new Error('Not signed in to a NEAR wallet');
+  }
+
+  const outcome = await wallet.signAndSendTransaction({
+    signerId,
+    receiverId,
+    actions: [
+      actionCreators.functionCall(methodName, args, gas, deposit),
+    ],
+  });
+
+  viewCache.clear();
+  return outcome;
+}
+
+function decodeSuccessValue(status: any): string | null {
+  if (!status || typeof status !== 'object') return null;
+  const value = status.SuccessValue ?? status.successValue;
+  if (typeof value !== 'string') return null;
+  if (value.length === 0) return null;
+  try {
+    return atob(value);
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Collect every non-empty SuccessValue in a FinalExecutionOutcome.
+ *
+ * Yield/resume calls (such as NEAR MPC CKD) may return their value in the
+ * final receipt rather than the transaction status, so all receipts are
+ * inspected.
+ */
+export function extractReturnValues(outcome: any): string[] {
+  const values: string[] = [];
+  const pushStatus = (status: any) => {
+    const value = decodeSuccessValue(status);
+    if (value) values.push(value);
+  };
+
+  pushStatus(outcome?.status);
+  const receipts = outcome?.receipts_outcome || outcome?.receiptsOutcome || [];
+  for (const receipt of receipts) {
+    pushStatus(receipt?.outcome?.status ?? receipt?.status);
+  }
+
+  const finalOutcome = outcome?.final_execution_outcome;
+  if (finalOutcome) {
+    pushStatus(finalOutcome.status);
+    for (const receipt of finalOutcome.receipts_outcome || []) {
+      pushStatus(receipt?.outcome?.status ?? receipt?.status);
+    }
+  }
+
+  return values;
+}
+
+/**
+ * Wait until a yield/resume transaction produces its return value.
+ *
+ * Wallets often return as soon as the first receipt executes, while the MPC
+ * callback arrives a few blocks later. Poll the transaction status until the
+ * CKD response is visible.
+ */
+export async function waitForReturnValues(
+  outcome: any,
+  timeoutMs: number = 120000,
+  matches?: (value: string) => boolean
+): Promise<string[]> {
+  const select = (values: string[]) =>
+    matches ? values.filter((value) => matches(value)) : values;
+
+  const immediate = select(extractReturnValues(outcome));
+  if (immediate.length > 0) return immediate;
+
+  const txHash =
+    outcome?.transaction_outcome?.id ||
+    outcome?.transaction?.hash ||
+    outcome?.transaction_outcome?.transaction?.hash ||
+    outcome?.transactionOutcome?.id;
+  const senderId = getAccountId();
+
+  if (!txHash || !senderId) {
+    throw new Error(
+      'The wallet did not return enough information to retrieve the MPC key response.'
+    );
+  }
+
+  if (!near) await initNear();
+
+  const deadline = Date.now() + timeoutMs;
+  let lastError: any = null;
+
+  while (Date.now() < deadline) {
+    try {
+      const status = await near.connection.provider.sendJsonRpc(
+        'EXPERIMENTAL_tx_status',
+        {
+          tx_hash: txHash,
+          sender_account_id: senderId,
+          wait_until: 'FINAL',
+        }
+      );
+      if (status?.status?.Failure) {
+        throw new Error(
+          `The MPC request failed: ${JSON.stringify(status.status.Failure)}`
+        );
+      }
+      const values = select(extractReturnValues(status));
+      if (values.length > 0) return values;
+    } catch (error: any) {
+      lastError = error;
+      if (/mpc request failed/i.test(String(error?.message || ''))) throw error;
+    }
+    await new Promise((resolve) => setTimeout(resolve, 2500));
+  }
+
+  throw new Error(
+    `Timed out waiting for the MPC key response.${
+      lastError ? ` ${lastError.message || lastError}` : ''
+    }`
+  );
+}
+
 export function createDrmContract(): DrmContract {
   return {
     nft_owner_of: async (args) => viewFunction('nft_owner_of', args),
@@ -214,6 +364,10 @@ export function createDrmContract(): DrmContract {
     nft_revoke: async (args) => functionCall('nft_revoke', args),
     get_sub_account: async (args) => viewFunction('get_sub_account', args),
     get_lock_state: async (args) => viewFunction('get_lock_state', args),
+    get_encryption_key: async (args) => viewFunction('get_encryption_key', args),
+    set_encryption_key: async (args) => functionCall('set_encryption_key', args),
+    get_key_envelope: async (args) => viewFunction('get_key_envelope', args),
+    set_key_envelope: async (args) => functionCall('set_key_envelope', args),
   };
 }
 

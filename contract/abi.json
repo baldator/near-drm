@@ -16,7 +16,8 @@
         "args": [
           {"name": "token_id", "type": "TokenId"},
           {"name": "owner_id", "type": "AccountId"},
-          {"name": "metadata", "type": "Option<TokenMetadata>"}
+          {"name": "metadata", "type": "Option<TokenMetadata>"},
+          {"name": "owner_envelope", "type": "Option<String>"}
         ],
         "return": "void"
       },
@@ -122,6 +123,33 @@
           {"name": "token_id", "type": "TokenId"}
         ],
         "return": "LockState"
+      },
+      "set_encryption_key": {
+        "args": [
+          {"name": "x25519_public_key", "type": "String"}
+        ],
+        "return": "void"
+      },
+      "get_encryption_key": {
+        "args": [
+          {"name": "account_id", "type": "AccountId"}
+        ],
+        "return": "Option<String>"
+      },
+      "get_key_envelope": {
+        "args": [
+          {"name": "token_id", "type": "TokenId"},
+          {"name": "account_id", "type": "AccountId"}
+        ],
+        "return": "Option<String>"
+      },
+      "set_key_envelope": {
+        "args": [
+          {"name": "token_id", "type": "TokenId"},
+          {"name": "account_id", "type": "AccountId"},
+          {"name": "envelope", "type": "String"}
+        ],
+        "return": "void"
       }
     }
   }

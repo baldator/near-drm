@@ -54,7 +54,7 @@ fn test_mint_and_owner() {
     testing_env!(context.build());
     let mut contract = Contract::new(owner(), make_metadata());
 
-    contract.nft_mint("token-1".to_string(), alice(), Some(make_metadata()));
+    contract.nft_mint("token-1".to_string(), alice(), Some(make_metadata()), None);
 
     assert_eq!(
         contract.nft_owner_of("token-1".to_string()),
@@ -72,7 +72,7 @@ fn test_transfer_path() {
     testing_env!(context.build());
     let mut contract = Contract::new(owner(), make_metadata());
 
-    contract.nft_mint("token-1".to_string(), alice(), Some(make_metadata()));
+    contract.nft_mint("token-1".to_string(), alice(), Some(make_metadata()), None);
     assert_eq!(contract.nft_owner_of("token-1".to_string()), Some(alice()));
 
     context = make_context(alice(), NearToken::from_yoctonear(0));
@@ -93,7 +93,7 @@ fn test_transfer_unauthorized() {
     testing_env!(context.build());
     let mut contract = Contract::new(owner(), make_metadata());
 
-    contract.nft_mint("token-1".to_string(), alice(), Some(make_metadata()));
+    contract.nft_mint("token-1".to_string(), alice(), Some(make_metadata()), None);
 
     context = make_context(bob(), NearToken::from_yoctonear(0));
     testing_env!(context.build());
@@ -106,7 +106,7 @@ fn test_approval_and_revoke() {
     testing_env!(context.build());
     let mut contract = Contract::new(owner(), make_metadata());
 
-    contract.nft_mint("token-1".to_string(), alice(), Some(make_metadata()));
+    contract.nft_mint("token-1".to_string(), alice(), Some(make_metadata()), None);
 
     context = make_context(alice(), NearToken::from_yoctonear(0));
     testing_env!(context.build());
@@ -129,7 +129,7 @@ fn test_approval_expiry() {
     testing_env!(context.build());
     let mut contract = Contract::new(owner(), make_metadata());
 
-    contract.nft_mint("token-1".to_string(), alice(), Some(make_metadata()));
+    contract.nft_mint("token-1".to_string(), alice(), Some(make_metadata()), None);
 
     context = make_context(alice(), NearToken::from_yoctonear(0));
     testing_env!(context.build());
@@ -148,7 +148,7 @@ fn test_transfer_clears_approvals() {
     testing_env!(context.build());
     let mut contract = Contract::new(owner(), make_metadata());
 
-    contract.nft_mint("token-1".to_string(), alice(), Some(make_metadata()));
+    contract.nft_mint("token-1".to_string(), alice(), Some(make_metadata()), None);
 
     context = make_context(alice(), NearToken::from_yoctonear(0));
     testing_env!(context.build());
@@ -172,8 +172,8 @@ fn test_nft_total_supply() {
 
     assert_eq!(contract.nft_total_supply(), U128(0));
 
-    contract.nft_mint("token-1".to_string(), alice(), Some(make_metadata()));
-    contract.nft_mint("token-2".to_string(), bob(), Some(make_metadata()));
+    contract.nft_mint("token-1".to_string(), alice(), Some(make_metadata()), None);
+    contract.nft_mint("token-2".to_string(), bob(), Some(make_metadata()), None);
 
     assert_eq!(contract.nft_total_supply(), U128(2));
 }

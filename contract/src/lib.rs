@@ -1,4 +1,5 @@
 mod approval;
+mod encryption;
 mod mint;
 mod state;
 mod transfer;
@@ -32,6 +33,8 @@ impl Contract {
             next_pending_id: 0,
             approvals_by_token: LookupMap::new(StorageKey::ApprovalsByToken),
             approvals_per_account: LookupMap::new(StorageKey::ApprovalsPerAccount),
+            encryption_keys: LookupMap::new(StorageKey::EncryptionKeys),
+            token_key_envelopes: LookupMap::new(StorageKey::TokenKeyEnvelopes),
         };
         this.metadata.set(&metadata);
         this

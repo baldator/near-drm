@@ -208,7 +208,7 @@ fn test_double_mint_rejected() {
     let mut contract = Contract::new(owner(), make_metadata());
 
     setup_minted(&mut contract, "token-1", alice());
-    contract.nft_mint("token-1".to_string(), bob(), Some(make_metadata()));
+    contract.nft_mint("token-1".to_string(), bob(), Some(make_metadata()), None);
 }
 
 /// Sub-account is bound to token on mint

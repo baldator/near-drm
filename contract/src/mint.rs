@@ -47,12 +47,19 @@ impl Contract {
         token_id: TokenId,
         owner_id: AccountId,
         metadata: Option<TokenMetadata>,
+        owner_envelope: Option<String>,
     ) {
         self.internal_mint(token_id.clone(), owner_id.clone(), metadata.clone());
         let sub_account_id = format!("token-{}.vault.near", token_id);
         let sub_account_id_parsed: AccountId =
             sub_account_id.parse().expect("Invalid sub-account ID");
         self.sub_accounts.insert(&token_id, &sub_account_id_parsed);
+        // The owner's wrapped content key can be delivered atomically with the
+        // mint, so a token is never left undecryptable because a second
+        // transaction failed.
+        if let Some(envelope) = owner_envelope {
+            self.internal_set_key_envelope(&token_id, &owner_id, &envelope);
+        }
         if let Some(meta) = metadata {
             self.emit_metadata_update_event(&token_id, &meta);
         }

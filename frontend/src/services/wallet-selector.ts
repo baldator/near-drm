@@ -72,6 +72,8 @@ export async function initWalletSelector() {
         'nft_revoke',
         'nft_transfer',
         'nft_transfer_call',
+        'set_encryption_key',
+        'set_key_envelope',
       ],
     },
   });

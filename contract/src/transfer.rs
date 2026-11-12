@@ -27,6 +27,9 @@ impl Contract {
             }
         }
         let owner_id_for_event = token.owner_id.clone();
+        // Preserve a key envelope that the sender pre-wrapped for the receiver.
+        // All other recipients' envelopes are destroyed with their approvals.
+        let receiver_envelope = self.internal_take_key_envelope(&token_id, &receiver_id);
         self.token_lock_state.insert(&token_id, &LockState::Locked);
         let mut sender_tokens = self
             .tokens_per_owner
@@ -45,6 +48,9 @@ impl Contract {
         updated_token.owner_id = receiver_id.clone();
         self.owner_of.insert(&token_id, &receiver_id);
         self.internal_clear_approvals(&token_id, &mut updated_token);
+        if let Some(envelope) = receiver_envelope {
+            self.internal_set_key_envelope(&token_id, &receiver_id, &envelope);
+        }
         self.token_lock_state.insert(&token_id, &LockState::Active);
         self.tokens_by_id.insert(&token_id, &updated_token);
         let memo_str = memo.as_deref().unwrap_or("");
@@ -77,6 +83,10 @@ impl Contract {
             }
         }
 
+        // A receiver that was already approved may have an envelope waiting.
+        // Preserve it across the temporary ownership change.
+        let receiver_envelope = self.internal_take_key_envelope(&token_id, &receiver_id);
+
         // Record pending transfer for callback resolution.
         let pending_id = self.next_pending_id;
         self.next_pending_id += 1;
@@ -104,6 +114,9 @@ impl Contract {
         updated_token.owner_id = receiver_id.clone();
         self.owner_of.insert(&token_id, &receiver_id);
         self.internal_clear_approvals(&token_id, &mut updated_token);
+        if let Some(envelope) = receiver_envelope {
+            self.internal_set_key_envelope(&token_id, &receiver_id, &envelope);
+        }
         self.tokens_by_id.insert(&token_id, &updated_token);
 
         // Cross-contract call to receiver's nft_on_transfer using raw Promise.
@@ -193,6 +206,7 @@ impl Contract {
                         .unwrap_or_else(|| UnorderedSet::new(tokens_per_owner_prefix(receiver_id)));
                     receiver_tokens.remove(token_id);
                     self.tokens_per_owner.insert(receiver_id, &receiver_tokens);
+                    self.internal_remove_key_envelope(token_id, receiver_id);
 
                     self.token_lock_state.insert(token_id, &LockState::Active);
 
@@ -213,6 +227,7 @@ impl Contract {
                 .unwrap_or_else(|| UnorderedSet::new(tokens_per_owner_prefix(sender_id)));
             sender_tokens.insert(token_id);
             self.tokens_per_owner.insert(sender_id, &sender_tokens);
+            self.internal_remove_key_envelope(token_id, receiver_id);
 
             self.token_lock_state.insert(token_id, &LockState::Active);
 
