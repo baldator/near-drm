@@ -75,7 +75,7 @@ Use `/mint` and choose a file. The app:
 3. Wraps the content key to your X25519 public key.
 4. Mints the NFT with `owner_envelope` so you can open it immediately.
 
-Original file name, MIME type, and encryption parameters are recorded in the token's `extra` metadata, which the gated page uses to restore the download name and type.
+Original file name, MIME type, and encryption parameters are recorded in the token's `extra` metadata, which the gated page uses to render the decrypted content in the secure canvas viewer.
 
 ### Step 3: Mint the NFT
 
@@ -155,7 +155,7 @@ near call $CONTRACT nft_approve '{
 
 1. Open `/gated/token-42` with your wallet connected.
 2. Click **Open protected file**. The app fetches the ciphertext from IPFS, reads your envelope from the contract, derives your X25519 secret through NEAR MPC CKD, unwraps the content key, and decrypts locally.
-3. Download the restored file. The original filename and MIME type come from the token's `extra` metadata.
+3. The decrypted bytes are rendered in-memory directly to an HTML5 canvas with a per-viewer watermark (your account ID, token ID, and render timestamp). Images, PDFs, and text files are supported. The page offers no download link, and unsupported binary formats are not exposed to the browser's download manager.
 4. Access expires after the TTL. After expiry the contract no longer returns your envelope — ask the owner to grant access again.
 
 ## For Sellers: Transferring Ownership

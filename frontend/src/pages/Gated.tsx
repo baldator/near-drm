@@ -1,6 +1,7 @@
 import React, { useCallback, useEffect, useState } from 'react';
 import { useParams } from 'react-router-dom';
 import { AccessList } from '../components/AccessList';
+import { ProtectedCanvasViewer } from '../components/ProtectedCanvasViewer';
 import { contract, getAccountId, isSignedIn } from '../services/contract';
 import type { NftApproval } from '../services/contract';
 import {
@@ -27,6 +28,12 @@ interface ProtectedFileInfo {
   fileType: string;
   encrypted: boolean;
   legacy: boolean;
+}
+
+interface DecryptedFile {
+  bytes: Uint8Array;
+  fileName: string;
+  fileType: string;
 }
 
 // `extra` is stored on the contract as a JSON string (see Mint.tsx), so it has
@@ -56,14 +63,6 @@ function readProtectedFileInfo(token: any): ProtectedFileInfo {
   };
 }
 
-function canPreviewAsText(fileType: string): boolean {
-  return (
-    fileType.startsWith('text/') ||
-    fileType === 'application/json' ||
-    fileType === 'application/xml'
-  );
-}
-
 export function GatedPage() {
   const { tokenId } = useParams();
   const [token, setToken] = useState<any>(null);
@@ -73,9 +72,7 @@ export function GatedPage() {
   const [grantAccount, setGrantAccount] = useState('');
   const [grantTtl, setGrantTtl] = useState('24');
   const [decrypting, setDecrypting] = useState(false);
-  const [decryptedPreview, setDecryptedPreview] = useState<string | null>(null);
-  const [downloadUrl, setDownloadUrl] = useState<string | null>(null);
-  const [downloadName, setDownloadName] = useState('protected-file');
+  const [decryptedFile, setDecryptedFile] = useState<DecryptedFile | null>(null);
   const [decryptError, setDecryptError] = useState<string | null>(null);
   const [approvals, setApprovals] = useState<NftApproval[]>([]);
   const [approvalsLoading, setApprovalsLoading] = useState(false);
@@ -120,12 +117,19 @@ export function GatedPage() {
     load();
   }, [tokenId]);
 
-  // Free the temporary download URL when the page closes or it is replaced.
+  // Keep the local key state in sync when the global prompt (or another page)
+  // registers the account encryption key.
   useEffect(() => {
-    return () => {
-      if (downloadUrl) URL.revokeObjectURL(downloadUrl);
+    const handler = (event: Event) => {
+      const detail = (event as CustomEvent<{ accountId?: string; publicKey?: string }>)
+        .detail;
+      if (!detail?.accountId || detail.accountId !== getAccountId()) return;
+      if (detail.publicKey) setEncryptionKey(detail.publicKey);
     };
-  }, [downloadUrl]);
+    window.addEventListener('near-drm:encryption-key-registered', handler);
+    return () =>
+      window.removeEventListener('near-drm:encryption-key-registered', handler);
+  }, []);
 
   const refreshApprovals = useCallback(async () => {
     if (!tokenId) return;
@@ -158,6 +162,11 @@ export function GatedPage() {
     try {
       const publicKey = await ensureRegisteredPublicKey(getAccountId()!);
       setEncryptionKey(publicKey);
+      window.dispatchEvent(
+        new CustomEvent('near-drm:encryption-key-registered', {
+          detail: { accountId: getAccountId(), publicKey },
+        })
+      );
       setStatus({
         tone: 'success',
         text: 'Your encryption key is registered. The owner can now share protected files with you.',
@@ -267,11 +276,7 @@ export function GatedPage() {
 
     setDecrypting(true);
     setDecryptError(null);
-    setDecryptedPreview(null);
-    if (downloadUrl) {
-      URL.revokeObjectURL(downloadUrl);
-      setDownloadUrl(null);
-    }
+    setDecryptedFile(null);
 
     try {
       const info = readProtectedFileInfo(token);
@@ -314,16 +319,15 @@ export function GatedPage() {
         ciphertext
       );
 
-      const blob = new Blob([plaintext as BlobPart], { type: info.fileType });
-      const url = URL.createObjectURL(blob);
-      setDownloadUrl(url);
-      setDownloadName(info.fileName);
-      setDecryptedPreview(
-        canPreviewAsText(info.fileType)
-          ? new TextDecoder().decode(plaintext)
-          : null
-      );
-      setStatus({ tone: 'success', text: 'The file is ready to download.' });
+      setDecryptedFile({
+        bytes: plaintext,
+        fileName: info.fileName,
+        fileType: info.fileType,
+      });
+      setStatus({
+        tone: 'success',
+        text: 'The file is open in the secure viewer.',
+      });
     } catch (error: any) {
       setDecryptError(error.message || error.toString());
       setStatus({ tone: 'error', text: "Couldn't open the file." });
@@ -516,7 +520,10 @@ export function GatedPage() {
             <div className="gated-step-number">2</div>
             <div>
               <h2>Open the file</h2>
-              <p>Decrypt and download your protected file.</p>
+              <p>
+                Decrypt and view it in the secure canvas viewer. A watermark
+                with your account ID is overlaid on every frame.
+              </p>
             </div>
           </div>
           {decrypting && (
@@ -531,31 +538,24 @@ export function GatedPage() {
               <p>{decryptError}</p>
             </div>
           )}
-          {downloadUrl ? (
+          {decryptedFile ? (
             <>
               <div className="gated-status gated-status-success">
                 <span>✓</span>
-                <p>The file is ready.</p>
+                <p>The file is open in the secure viewer.</p>
               </div>
-              <a
-                href={downloadUrl}
-                download={downloadName}
-                className="btn btn-primary"
-              >
-                Download {downloadName}
-              </a>
-              {decryptedPreview && (
-                <div className="gated-decrypted-preview">{decryptedPreview}</div>
-              )}
+              <ProtectedCanvasViewer
+                bytes={decryptedFile.bytes}
+                fileName={decryptedFile.fileName}
+                fileType={decryptedFile.fileType}
+                viewerId={getAccountId() || 'unknown'}
+                tokenId={tokenId || 'unknown'}
+              />
               <button
-                onClick={() => {
-                  setDecryptedPreview(null);
-                  URL.revokeObjectURL(downloadUrl);
-                  setDownloadUrl(null);
-                }}
+                onClick={() => setDecryptedFile(null)}
                 className="btn btn-outline"
               >
-                Clear
+                Close viewer
               </button>
             </>
           ) : (

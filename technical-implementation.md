@@ -159,12 +159,14 @@ near-hackathon/
 │   ├── src/
 │   │   ├── pages/
 │   │   │   ├── Mint.tsx      # Encrypt with AES-GCM + mint with owner envelope
-│   │   │   ├── Gated.tsx     # Key registration, grant, decrypt/download
+│   │   │   ├── Gated.tsx     # Key registration, grant, decrypt + canvas viewer
 │   │   │   └── ...
 │   │   ├── services/
 │   │   │   ├── near-mpc.ts   # CKD, HKDF, X25519 envelopes, AES-256-GCM
 │   │   │   └── contract.ts   # Wallet, contract calls, MPC response polling
 │   │   └── components/
+│   │       ├── ProtectedCanvasViewer.tsx  # In-memory canvas + watermark
+│   │       └── EncryptionKeyPrompt.tsx    # Post-connect key setup prompt
 │   ├── package.json
 │   └── README.md
 ├── technical-implementation.md

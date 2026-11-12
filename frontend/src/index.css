@@ -2289,15 +2289,81 @@ body {
   animation: mint-spin 0.8s linear infinite;
 }
 
-.gated-decrypted-preview {
-  white-space: pre-wrap;
-  background: #f5f5f5;
-  padding: 1rem;
-  border-radius: 4px;
-  border: 1px solid #ddd;
-  margin: 0.75rem 0;
+/* Secure in-memory canvas viewer for decrypted files. */
+.protected-viewer {
+  margin: 1rem 0;
+  border: 1px solid #1e293b;
+  border-radius: 12px;
+  overflow: hidden;
+  background: #0b1220;
+  box-shadow: 0 12px 30px rgba(15, 23, 42, 0.18);
+}
+
+.protected-viewer-caption {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 1rem;
+  padding: 0.6rem 0.9rem;
+  background: #0f172a;
+  border-bottom: 1px solid #1e293b;
+  color: #cbd5e1;
+  font-size: 0.78rem;
+}
+
+.protected-viewer-file {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-weight: 600;
+}
+
+.protected-viewer-viewer {
+  flex: 0 0 auto;
+  color: #6ee7b7;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+}
+
+.protected-viewer-frame {
+  position: relative;
+  max-height: 72vh;
+  overflow: auto;
+  background: #111827;
+}
+
+.protected-viewer-canvas {
+  display: block;
+  width: 100%;
+  height: auto;
+  max-width: 100%;
+  cursor: default;
+  user-select: none;
+  -webkit-user-drag: none;
+}
+
+.protected-viewer-message {
+  min-height: 220px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.65rem;
+  padding: 1.5rem;
+  color: #cbd5e1;
   font-size: 0.9rem;
-  color: #333;
+  text-align: center;
+}
+
+.protected-viewer-message-error {
+  color: #fecaca;
+}
+
+.protected-viewer-note {
+  margin: 0;
+  padding: 0.6rem 0.9rem 0.7rem;
+  border-top: 1px solid #1e293b;
+  color: #64748b;
+  font-size: 0.75rem;
+  line-height: 1.4;
 }
 
 /* History page */
@@ -3599,5 +3665,109 @@ body {
 
   .doc-chip {
     font-size: 0.72rem;
+  }
+}
+
+/* Global encryption-key setup prompt (shown after wallet connection). */
+.key-prompt-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 11000;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 1rem;
+  background: rgba(15, 23, 42, 0.55);
+  backdrop-filter: blur(3px);
+}
+
+.key-prompt {
+  width: 100%;
+  max-width: 460px;
+  background: #fff;
+  border-radius: 16px;
+  padding: 1.75rem;
+  box-shadow: 0 24px 60px rgba(15, 23, 42, 0.3);
+  text-align: center;
+}
+
+.key-prompt-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 3rem;
+  height: 3rem;
+  margin-bottom: 0.75rem;
+  border-radius: 50%;
+  background: #eef2ff;
+  font-size: 1.5rem;
+}
+
+.key-prompt h2 {
+  margin: 0 0 0.6rem;
+  font-size: 1.3rem;
+  color: #1a1a2e;
+}
+
+.key-prompt p {
+  margin: 0 0 0.75rem;
+  color: #4b5563;
+  font-size: 0.92rem;
+  line-height: 1.5;
+}
+
+.key-prompt .key-prompt-note {
+  margin-bottom: 1.1rem;
+  padding: 0.65rem 0.75rem;
+  border-radius: 8px;
+  background: #f8fafc;
+  border: 1px solid #e2e8f0;
+  color: #64748b;
+  font-size: 0.82rem;
+}
+
+.key-prompt-error {
+  margin-bottom: 1rem;
+  padding: 0.65rem 0.75rem;
+  border-radius: 8px;
+  background: #fef2f2;
+  border: 1px solid #fecaca;
+  color: #991b1b;
+  font-size: 0.85rem;
+  text-align: left;
+  word-break: break-word;
+}
+
+.key-prompt-progress {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.6rem;
+  margin-bottom: 1rem;
+  font-size: 0.85rem;
+  color: #4b5563;
+}
+
+.key-prompt-actions {
+  display: flex;
+  gap: 0.75rem;
+  justify-content: flex-end;
+}
+
+.key-prompt-actions .btn {
+  min-width: 120px;
+}
+
+@media (max-width: 460px) {
+  .key-prompt {
+    padding: 1.4rem;
+  }
+
+  .key-prompt-actions {
+    flex-direction: column-reverse;
+  }
+
+  .key-prompt-actions .btn {
+    width: 100%;
   }
 }

@@ -8,6 +8,7 @@ import {
   useLocation,
 } from 'react-router-dom';
 import { ConnectButton } from './components/ConnectButton';
+import { EncryptionKeyPrompt } from './components/EncryptionKeyPrompt';
 import { LandingPage } from './pages/LandingPage';
 import { DocumentationPage } from './pages/DocumentationPage';
 import { UseCasesPage } from './pages/UseCases';
@@ -67,6 +68,8 @@ function AppShell() {
           <Route path="/tech-docs" element={<TechnicalDocumentationPage />} />
         </Routes>
       </main>
+
+      <EncryptionKeyPrompt />
 
       <footer className="app-footer">
         <p>

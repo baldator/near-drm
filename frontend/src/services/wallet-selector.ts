@@ -14,7 +14,17 @@ let activeWallet: any = null;
 let accountId: string | null = null;
 let selectedWalletId: string | null = null;
 let walletName: string | null = null;
-let onAccountChangeCallback: ((accountId: string | null) => void) | null = null;
+const accountChangeListeners = new Set<(accountId: string | null) => void>();
+
+function notifyAccountChange(accountId: string | null) {
+  accountChangeListeners.forEach((listener) => {
+    try {
+      listener(accountId);
+    } catch (error) {
+      console.error('Account change listener failed:', error);
+    }
+  });
+}
 
 /**
  * Resolve the human-friendly name of a wallet (e.g. "Meteor Wallet")
@@ -86,6 +96,8 @@ export async function initWalletSelector() {
       'nft_revoke',
       'nft_transfer',
       'nft_transfer_call',
+      'set_encryption_key',
+      'set_key_envelope',
     ],
     theme: 'auto',
   });
@@ -93,7 +105,7 @@ export async function initWalletSelector() {
   // Restore a previously connected session on page load.
   await restoreFromStore();
   if (accountId) {
-    onAccountChangeCallback?.(accountId);
+    notifyAccountChange(accountId);
   }
 
   // Handle sign-in from the modal or programmatic sign-in
@@ -108,7 +120,7 @@ export async function initWalletSelector() {
       } catch (e) {
         // wallet may already be initialized
       }
-      onAccountChangeCallback?.(accountId);
+      notifyAccountChange(accountId);
     }
   });
 
@@ -117,7 +129,7 @@ export async function initWalletSelector() {
     selectedWalletId = null;
     walletName = null;
     activeWallet = null;
-    onAccountChangeCallback?.(null);
+    notifyAccountChange(null);
   });
 
   selector.on('accountsChanged', (event) => {
@@ -126,7 +138,7 @@ export async function initWalletSelector() {
       accountId = active.accountId;
       selectedWalletId = event.walletId;
       walletName = resolveWalletName(event.walletId);
-      onAccountChangeCallback?.(accountId);
+      notifyAccountChange(accountId);
     }
   });
 
@@ -145,9 +157,9 @@ export function getModal() {
  * Subscribe to account changes (sign in / sign out).
  */
 export function onAccountChange(callback: (accountId: string | null) => void) {
-  onAccountChangeCallback = callback;
+  accountChangeListeners.add(callback);
   return () => {
-    onAccountChangeCallback = null;
+    accountChangeListeners.delete(callback);
   };
 }
 
@@ -167,6 +179,8 @@ export async function signIn(walletId: string) {
       'nft_revoke',
       'nft_transfer',
       'nft_transfer_call',
+      'set_encryption_key',
+      'set_key_envelope',
     ],
   });
 
@@ -175,7 +189,7 @@ export async function signIn(walletId: string) {
     selectedWalletId = walletId;
     walletName = resolveWalletName(walletId) ?? wallet.metadata?.name ?? null;
     activeWallet = wallet;
-    onAccountChangeCallback?.(accountId);
+    notifyAccountChange(accountId);
   }
 
   return accountId;
@@ -216,7 +230,7 @@ export async function signOut(): Promise<boolean> {
     // Disconnect was cancelled or failed — keep the session intact.
     await restoreFromStore();
     if (accountId) {
-      onAccountChangeCallback?.(accountId);
+      notifyAccountChange(accountId);
     }
     return false;
   }
@@ -226,7 +240,7 @@ export async function signOut(): Promise<boolean> {
   selectedWalletId = null;
   walletName = null;
   activeWallet = null;
-  onAccountChangeCallback?.(null);
+  notifyAccountChange(null);
   return true;
 }
 
